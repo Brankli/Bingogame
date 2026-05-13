@@ -2,21 +2,22 @@ import {App} from "vue";
 import RoomService from "@/services/RoomService";
 import {UserService} from "@/services/UserService";
 import {AuthService} from "@/services/AuthService";
-import io from 'socket.io-client';
-import cookie from "cookie";
+import CardService from "@/services/card.service";
 
 export interface Services {
     roomService: RoomService,
     userService: UserService,
     authService: AuthService,
+    cardService: CardService,
 }
 
 export default {
-    install: (app: App, options: any) => {
+    install: (app: App) => {
         app.provide('services', {
             roomService: new RoomService(),
             userService: new UserService(),
             authService: new AuthService(),
+            cardService: new CardService(),
         });
     },
 };

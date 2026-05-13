@@ -13,12 +13,14 @@ import { Repository } from 'typeorm';
 import { Room } from '../room/entities/room.entity';
 import { RoomService } from '../room/room.service';
 import { Cache } from 'cache-manager';
-import { EXTRACTED_NUMBERS_CACHE_PREFIX } from './consts/match.const';
+import { EXTRACTED_NUMBERS_CACHE_PREFIX, MATCH_NUMBER_EXTRACTION_DELAY } from './consts/match.const';
 import { MatchNumber } from './entities/match-number.entity';
 import { SocketsGateway } from '../sockets/sockets.gateway';
 import {
   BINGO_ONE_STARTED_EVENT,
   EXTRACTED_NUMBERS_EVENT,
+  MATCH_PAUSED_EVENT,
+  MATCH_RESET_EVENT,
 } from '../sockets/consts/sockets.const';
 import {
   BINGO_BRONZE_PRIZE_EURO,
@@ -34,6 +36,8 @@ import { CreateMatchDto } from './dto/create-match.dto';
 @Injectable()
 export class MatchService {
   private readonly logger: Logger = new Logger('MatchService');
+  private matchTimers: Map<number, NodeJS.Timeout> = new Map();
+  private readonly matchNumbersCachePrefix = EXTRACTED_NUMBERS_CACHE_PREFIX;
 
   constructor(
     @InjectQueue('matches')
@@ -54,6 +58,40 @@ export class MatchService {
     private readonly socketsGateway: SocketsGateway,
   ) {
     //
+  }
+
+  startTimer(match: Match, roomId: number): void {
+    // Clear any existing timer for this match
+    if (this.matchTimers.has(match.id)) {
+      clearInterval(this.matchTimers.get(match.id));
+      this.logger.log(`Cleared existing timer for match #${match.id}`);
+    }
+
+    this.logger.log(`Starting timer for match #${match.id} in room #${roomId}`);
+
+    const timer = setInterval(async () => {
+      const extractedNumber = await this.extractNumber(match);
+
+      if (extractedNumber === 0) {
+        return;
+      }
+
+      if (extractedNumber === null && this.matchTimers.has(match.id)) {
+        clearInterval(this.matchTimers.get(match.id));
+        this.matchTimers.delete(match.id);
+        this.logger.log(`Timer completed for match #${match.id}`);
+      }
+    }, MATCH_NUMBER_EXTRACTION_DELAY);
+
+    this.matchTimers.set(match.id, timer);
+  }
+
+  stopTimer(matchId: number): void {
+    if (this.matchTimers.has(matchId)) {
+      clearInterval(this.matchTimers.get(matchId));
+      this.matchTimers.delete(matchId);
+      this.logger.log(`Timer stopped for match #${matchId}`);
+    }
   }
 
   async addRoomToQueue(
@@ -87,22 +125,33 @@ export class MatchService {
       return null;
     }
 
-    const extractedNumbers =
-      match.matchNumbers.map((number) => number.number) || [];
+    const cacheKey = this.getMatchNumbersCacheKey(match.id);
+    const cachedNumbers = await this.cacheManager.get<number[]>(cacheKey);
+    const extractedNumbers = Array.isArray(cachedNumbers)
+      ? cachedNumbers
+      : match.matchNumbers.map((number) => number.number) || [];
 
-    if (extractedNumbers.length > 90) {
+    if (!Array.isArray(cachedNumbers)) {
+      await this.cacheManager.set(cacheKey, extractedNumbers);
+    }
+
+    // Changed from 90 to 75 for 75-ball bingo
+    if (extractedNumbers.length >= 75) {
       return null;
     }
 
     let extractedNumber = null;
     do {
-      extractedNumber = Math.floor(Math.random() * (91 - 1) + 1);
+      // Changed from 91 to 76 for 75-ball bingo (1-75)
+      extractedNumber = Math.floor(Math.random() * 75) + 1;
     } while (extractedNumbers.includes(extractedNumber));
 
-    this.matchNumberRepository.save({
+    await this.matchNumberRepository.save({
       match,
       number: extractedNumber,
     });
+
+    await this.cacheManager.set(cacheKey, [...extractedNumbers, extractedNumber]);
 
     this.socketsGateway.server
       .to(match.room.id.toString())
@@ -117,8 +166,9 @@ export class MatchService {
   async create(room: Room, createMatchDto: CreateMatchDto): Promise<Match> {
     const match = await this.matchRepository.save({
       room,
-      soldCars: createMatchDto.soldCards,
+      soldCards: createMatchDto.soldCards,
     });
+    await this.clearMatchNumbersCache(match.id);
 
     const roomPrize = room.roomPrize;
     roomPrize.oneBalls =
@@ -158,26 +208,62 @@ export class MatchService {
     return this.findOne(match.id);
   }
 
-  async close(match: Match | number): Promise<void> {
+  async close(match: Match | number, roomId?: number): Promise<void> {
+    const matchId = match instanceof Match ? match.id : match;
+    
+    // Stop the timer first
+    this.stopTimer(matchId);
+    
     await this.matchRepository.update(
-      { id: match instanceof Match ? match.id : match },
+      { id: matchId },
       { closed: true },
     );
+    await this.clearMatchNumbersCache(matchId);
+
+    // Notify clients that match is paused
+    if (roomId) {
+      this.socketsGateway.server
+        .to(roomId.toString())
+        .emit(MATCH_PAUSED_EVENT, { matchId });
+    }
+    
+    this.logger.log(`Match #${matchId} closed and timer stopped`);
+  }
+
+  async reset(matchId: number, roomId: number): Promise<void> {
+    // Stop the timer
+    this.stopTimer(matchId);
+
+    // Close the match
+    await this.matchRepository.update({ id: matchId }, { closed: true });
+    await this.clearMatchNumbersCache(matchId);
+
+    // Notify clients that match is reset
+    this.socketsGateway.server
+      .to(roomId.toString())
+      .emit(MATCH_RESET_EVENT, { matchId });
+      
+    this.logger.log(`Match #${matchId} reset and timer stopped`);
   }
 
   async start(match: Match | number, room?: number): Promise<void> {
-    this.logger.log(
-      'Match #' + (match instanceof Match ? match.id : match) + ' is starting',
-    );
+    const matchId = match instanceof Match ? match.id : match;
+    this.logger.log(`Match #${matchId} is starting/resuming`);
 
     await this.matchRepository.update(
-      { id: match instanceof Match ? match.id : match },
+      { id: matchId },
       { closed: false },
     );
+    await this.clearMatchNumbersCache(matchId);
 
-    if (!(match instanceof Match)) {
-      const matchInstance = await this.findOne(match);
-      await this.addRoomToQueue(matchInstance, room);
+    // Get the match instance and restart the timer
+    const matchInstance = await this.findOne(matchId);
+    
+    // Restart the timer for resumed matches
+    if (room) {
+      this.startTimer(matchInstance, room);
+    } else if (matchInstance.room) {
+      this.startTimer(matchInstance, matchInstance.room.id);
     }
   }
 
@@ -189,5 +275,13 @@ export class MatchService {
         matchNumbers: true,
       },
     });
+  }
+
+  private getMatchNumbersCacheKey(matchId: number): string {
+    return `${this.matchNumbersCachePrefix}${matchId}`;
+  }
+
+  private async clearMatchNumbersCache(matchId: number): Promise<void> {
+    await this.cacheManager.del(this.getMatchNumbersCacheKey(matchId));
   }
 }

@@ -12,6 +12,7 @@ import {
 import { User } from '../../user/entities/user.entity';
 import { Match } from '../../match/entities/match.entity';
 import { RoomPrize } from './room-prize.entity';
+import { RoomManager } from './room-manager.entity';
 
 @Entity({ name: 'rooms' })
 export class Room {
@@ -26,6 +27,12 @@ export class Room {
     onDelete: 'CASCADE',
   })
   owner!: User;
+
+  @OneToMany(() => RoomManager, (manager) => manager.room, {
+    cascade: true,
+    eager: true,
+  })
+  managers?: RoomManager[];
 
   @Column({ type: 'datetime', default: () => 'NOW' })
   createdAt!: Date;

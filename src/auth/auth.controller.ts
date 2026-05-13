@@ -12,6 +12,9 @@ import { AuthDto, mapToAuthDto } from './dto/auth.dto';
 import { mapToUserDto, UserDto } from '../user/dto/user.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { User } from '../decorators/user.decorator';
+import { RolesGuard } from './guards/roles.guard';
+import { Roles } from '../decorators/roles.decorator';
+import { UserRole } from '../user/entities/user.entity';
 
 @Controller('auth')
 export class AuthController {
@@ -27,6 +30,8 @@ export class AuthController {
     return mapToAuthDto(login.user, login.accessToken);
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
   @Post('register')
   async register(@Body() loginDto: LoginDto): Promise<AuthDto> {
     const login = await this.authService.register(loginDto);

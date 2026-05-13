@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { PassportModule } from '@nestjs/passport';
@@ -9,6 +9,8 @@ import { JwtStrategy } from './jwt.strategy';
 import { WsGuard } from './guards/ws.guard';
 import { LocalStrategy } from './local.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { RolesGuard } from './guards/roles.guard';
+import { RoomManagerGuard } from './guards/room-manager.guard';
 
 @Module({
   imports: [
@@ -24,9 +26,18 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
       inject: [ConfigService],
     }),
     UserModule,
+    forwardRef(() => require('../room/room.module').RoomModule),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, LocalStrategy, WsGuard, JwtAuthGuard],
-  exports: [JwtAuthGuard, WsGuard],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    LocalStrategy,
+    WsGuard,
+    JwtAuthGuard,
+    RolesGuard,
+    RoomManagerGuard,
+  ],
+  exports: [JwtAuthGuard, WsGuard, RolesGuard, RoomManagerGuard],
 })
 export class AuthModule {}

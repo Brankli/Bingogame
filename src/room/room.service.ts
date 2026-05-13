@@ -1,4 +1,4 @@
-import { forwardRef, Inject, Injectable } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Room } from './entities/room.entity';
@@ -13,6 +13,7 @@ import {
 import { Match } from '../match/entities/match.entity';
 import { RoomPrize } from './entities/room-prize.entity';
 import { mapToRoomDto } from './dto/room.dto';
+import { RoomManager } from './entities/room-manager.entity';
 
 @Injectable()
 export class RoomService {
@@ -22,6 +23,9 @@ export class RoomService {
 
     @InjectRepository(RoomPrize)
     private readonly roomPrizeRepository: Repository<RoomPrize>,
+
+    @InjectRepository(RoomManager)
+    private readonly roomManagerRepository: Repository<RoomManager>,
 
     @Inject(forwardRef(() => MatchService))
     private readonly matchService: MatchService,
@@ -43,7 +47,20 @@ export class RoomService {
   }
 
   async findAll(): Promise<Room[]> {
-    return await this.roomRepository.find();
+    return await this.roomRepository.find({
+      relations: {
+        owner: true,
+        currentUsers: true,
+        roomPrize: true,
+        currentMatch: {
+          matchNumbers: true,
+        },
+        matches: true,
+        managers: {
+          user: true,
+        },
+      },
+    });
   }
 
   async findOne(id: number, options?: any): Promise<Room> {
@@ -56,6 +73,9 @@ export class RoomService {
           matchNumbers: true,
         },
         roomPrize: true,
+        managers: {
+          user: true,
+        },
         ...(options?.relations || {}),
       },
     });
@@ -73,13 +93,27 @@ export class RoomService {
     return this.findOne(id);
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} room`;
+  async remove(id: number): Promise<{ success: boolean }> {
+    const room = await this.roomRepository.findOne({ where: { id } });
+    if (!room) {
+      throw new NotFoundException('Room not found');
+    }
+    const result = await this.roomRepository.delete({ id });
+    if (!result.affected) {
+      throw new NotFoundException('Room not found');
+    }
+    this.socketsGateway.server.emit(NEW_ROOM_AVAILABLE_EVENT);
+    return { success: true };
   }
 
   async join(roomId: number, user: User): Promise<void> {
     const room = await this.findOne(roomId);
-    room.currentUsers.push(user);
+    const alreadyJoined = room.currentUsers.some(
+      (currentUser) => currentUser.id === user.id,
+    );
+    if (!alreadyJoined) {
+      room.currentUsers.push(user);
+    }
 
     await this.roomRepository.save(room);
   }
@@ -114,5 +148,84 @@ export class RoomService {
     }
 
     return this.findOne(roomId);
+  }
+
+  async assignManager(userId: number, roomId: number): Promise<RoomManager> {
+    // Check if already assigned
+    const existing = await this.roomManagerRepository.findOne({
+      where: {
+        user: { id: userId },
+        room: { id: roomId },
+      },
+    });
+
+    if (existing) {
+      return existing;
+    }
+
+    const manager = this.roomManagerRepository.create({
+      user: { id: userId } as User,
+      room: { id: roomId } as Room,
+    });
+
+    return this.roomManagerRepository.save(manager);
+  }
+
+  async removeManager(userId: number, roomId: number): Promise<void> {
+    await this.roomManagerRepository.delete({
+      user: { id: userId },
+      room: { id: roomId },
+    });
+  }
+
+  async getUserManagedRooms(userId: number): Promise<Room[]> {
+    const managers = await this.roomManagerRepository.find({
+      where: { user: { id: userId } },
+      relations: ['room'],
+    });
+    const rooms = await Promise.all(
+      managers.map(async (m) => {
+        if (!m.room?.id) {
+          return null;
+        }
+        return this.findOne(m.room.id);
+      }),
+    );
+
+    return rooms.filter((room): room is Room => !!room);
+  }
+
+  async canManageRoom(userId: number, roomId: number, userRole: string): Promise<boolean> {
+    // Admins can manage any room
+    if (userRole === 'admin') {
+      return true;
+    }
+
+    // Check if user is assigned as manager
+    const manager = await this.roomManagerRepository.findOne({
+      where: {
+        user: { id: userId },
+        room: { id: roomId },
+      },
+    });
+
+    return !!manager;
+  }
+
+  async cleanupInvalidManagers(): Promise<number> {
+    // Find all room managers
+    const allManagers = await this.roomManagerRepository.find({
+      relations: ['user', 'room'],
+    });
+
+    // Filter out managers with deleted users
+    const invalidManagers = allManagers.filter(m => !m.user);
+    
+    // Delete invalid assignments
+    if (invalidManagers.length > 0) {
+      await this.roomManagerRepository.remove(invalidManagers);
+    }
+
+    return invalidManagers.length;
   }
 }

@@ -7,11 +7,12 @@ import { MatchModule } from '../match/match.module';
 import { SocketsModule } from '../sockets/sockets.module';
 import { AuthModule } from '../auth/auth.module';
 import { UserModule } from '../user/user.module';
-import { RoomPrize } from "./entities/room-prize.entity";
+import { RoomPrize } from './entities/room-prize.entity';
+import { RoomManager } from './entities/room-manager.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Room, RoomPrize]),
+    TypeOrmModule.forFeature([Room, RoomPrize, RoomManager]),
     forwardRef(() => MatchModule),
     SocketsModule,
     AuthModule,
@@ -19,6 +20,6 @@ import { RoomPrize } from "./entities/room-prize.entity";
   ],
   controllers: [RoomController],
   providers: [RoomService],
-  exports: [RoomService],
+  exports: [RoomService, TypeOrmModule],
 })
 export class RoomModule {}

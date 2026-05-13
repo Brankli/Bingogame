@@ -187,7 +187,7 @@
 
 
 <script setup lang="ts">
-import { computed, inject, onMounted, Ref, ref } from "vue";
+import { computed, inject, onMounted, onBeforeUnmount, Ref, ref } from "vue";
 import { onBeforeRouteLeave, useRoute } from "vue-router";
 import { useSocket } from "@/store/socket";
 import {
@@ -282,10 +282,19 @@ function pauseMatch() {
   toggleBackgroundMusic();
 }
 function setupPrice() {
-  services?.roomService.ticketPrice(room.value!.id, ticketPrice.value)
+  if (!room.value) {
+    return;
+  }
+
+  services?.roomService.ticketPrice(room.value.id, ticketPrice.value)
     .then(({ data }) => {
       if((data.matches || []).length >= 1) {
-        soldCards.value = matches.value.find(match => match.id === currentMatchId.value)!.soldCards;
+        const selectedMatch = matches.value.find(
+          (match) => match.id === currentMatchId.value,
+        );
+        if (selectedMatch) {
+          soldCards.value = selectedMatch.soldCards;
+        }
       }
       // newMatch()
       housekeepingDialog.value = false
@@ -293,11 +302,11 @@ function setupPrice() {
     .catch(console.error)
 }
 function resetPrize() {
-  if (prizeToReset.value === null) {
+  if (prizeToReset.value === null || !room.value) {
     return;
   }
 
-  services?.roomService.resetPrize(room.value!.id, prizeToReset.value!)
+  services?.roomService.resetPrize(room.value.id, prizeToReset.value)
     .then(({ data }) => {
       roomPrize.value = data.roomPrize;
       housekeepingDialog.value = false;
@@ -315,8 +324,31 @@ function toggleBackgroundMusic() {
 
 // Events
 onMounted(() => fakeBtn?.value?.click())
-onBeforeRouteLeave((to, from) => {
+
+onBeforeRouteLeave(() => {
   client?.emit(ON_EXIT_ROOM_EVENT, { roomId: +route.params.roomId });
+})
+
+// Cleanup when component unmounts
+onBeforeUnmount(() => {
+  // Remove all socket listeners
+  client?.off(EXTRACTED_NUMBERS_EVENT);
+  client?.off(PLAYER_JOINED_EVENT);
+  client?.off(NEW_MATCH_STARTED_EVENT);
+  client?.off(BINGO_ONE_STARTED_EVENT);
+  
+  // Leave the room
+  client?.emit(ON_EXIT_ROOM_EVENT, { roomId: +route.params.roomId });
+  
+  // Stop speech synthesis
+  window.speechSynthesis.cancel();
+  
+  // Stop background music
+  const audio = document.getElementById('bingo-background-player') as HTMLAudioElement;
+  if (audio) {
+    audio.pause();
+    audio.currentTime = 0;
+  }
 })
 
 // Sockets

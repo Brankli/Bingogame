@@ -7,6 +7,7 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
+import { WsException } from '@nestjs/websockets';
 import { forwardRef, Inject, Logger, UseGuards } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { RoomService } from '../room/room.service';
@@ -19,8 +20,11 @@ import {
   PAUSE_MATCH_EVENT,
   PLAY_MATCH_EVENT,
   PLAYER_JOINED_EVENT,
+  PLAYER_WON_EVENT,
+  RESET_MATCH_EVENT,
 } from './consts/sockets.const';
 import { MatchService } from '../match/match.service';
+import { UserService } from '../user/user.service';
 
 @WebSocketGateway({ cors: { origin: '*' } })
 export class SocketsGateway
@@ -36,8 +40,25 @@ export class SocketsGateway
 
     @Inject(forwardRef(() => MatchService))
     private readonly matchService: MatchService,
+
+    private readonly userService: UserService,
   ) {
     //
+  }
+
+  private getAuthenticatedUser(client: Socket): User {
+    const user = client?.data?.user as User | undefined;
+    if (!user) {
+      throw new WsException('Unauthorized socket user');
+    }
+    return user;
+  }
+
+  private async ensureCanManageRoom(user: User, roomId: number): Promise<void> {
+    const canManage = await this.roomService.canManageRoom(user.id, roomId, user.role);
+    if (!canManage) {
+      throw new WsException('Forbidden: insufficient room permissions');
+    }
   }
 
   @UseGuards(WsGuard)
@@ -45,8 +66,8 @@ export class SocketsGateway
   async handleOnEnteredRoom(
     @ConnectedSocket() client: Socket,
     @MessageBody('roomId') roomId: number,
-    @MessageBody('user') user: User,
   ): Promise<void> {
+    const user = this.getAuthenticatedUser(client);
     await this.roomService.join(roomId, user);
 
     await client.join(roomId.toString());
@@ -56,7 +77,7 @@ export class SocketsGateway
       .emit(PLAYER_JOINED_EVENT, { username: user.username });
 
     client.on('disconnect', () => {
-      this.handleOnExitRoom(client, roomId, user);
+      this.roomService.leave(roomId, user).catch(() => undefined);
     });
   }
 
@@ -65,8 +86,8 @@ export class SocketsGateway
   async handleOnExitRoom(
     @ConnectedSocket() client: Socket,
     @MessageBody('roomId') roomId: number,
-    @MessageBody('user') user: User,
   ): Promise<void> {
+    const user = this.getAuthenticatedUser(client);
     //await client.leave(roomId.toString());
     await this.roomService.leave(roomId, user);
   }
@@ -77,12 +98,24 @@ export class SocketsGateway
     @ConnectedSocket() client: Socket,
     @MessageBody('roomId') roomId: number,
     @MessageBody('soldCards') soldCards: number,
-    @MessageBody('user') user: User,
+    @MessageBody('houseFeePerCard') houseFeePerCard?: number,
   ): Promise<void> {
-    this.logger.log(`Room ${roomId} is starting a new match`);
+    const user = this.getAuthenticatedUser(client);
+    await this.ensureCanManageRoom(user, roomId);
+    this.logger.log(`Room ${roomId} is starting a new match with ${soldCards} cards`);
 
     const room = await this.roomService.closeMatches(roomId);
     await this.roomService.startMatch(room, soldCards);
+
+    // Calculate and add house fee earnings
+    const feePerCard = houseFeePerCard || 2; // Default 2 Birr per card
+    const totalHouseFee = soldCards * feePerCard;
+    
+    // Add earnings to room owner (or the user who started the game)
+    const roomOwnerId = room.owner?.id || user.id;
+    await this.userService.addEarnings(roomOwnerId, totalHouseFee);
+    
+    this.logger.log(`Added ${totalHouseFee} Birr house fee to user ${roomOwnerId}`);
   }
 
   @UseGuards(WsGuard)
@@ -90,9 +123,11 @@ export class SocketsGateway
   async handlePlayMatch(
     @ConnectedSocket() client: Socket,
     @MessageBody('matchId') matchId: number,
-    @MessageBody('matchId') roomId: number,
-    @MessageBody('user') user: User,
+    @MessageBody('roomId') roomId: number,
   ): Promise<void> {
+    const user = this.getAuthenticatedUser(client);
+    await this.ensureCanManageRoom(user, roomId);
+    this.logger.log(`Match ${matchId} is resuming in room ${roomId}`);
     await this.matchService.start(matchId, roomId);
   }
 
@@ -101,9 +136,44 @@ export class SocketsGateway
   async handlePauseMatch(
     @ConnectedSocket() client: Socket,
     @MessageBody('matchId') matchId: number,
-    @MessageBody('user') user: User,
+    @MessageBody('roomId') roomId: number,
   ): Promise<void> {
-    await this.matchService.close(matchId);
+    const user = this.getAuthenticatedUser(client);
+    await this.ensureCanManageRoom(user, roomId);
+    this.logger.log(`Match ${matchId} is being paused`);
+    await this.matchService.close(matchId, roomId);
+  }
+
+  @UseGuards(WsGuard)
+  @SubscribeMessage(RESET_MATCH_EVENT)
+  async handleResetMatch(
+    @ConnectedSocket() client: Socket,
+    @MessageBody('matchId') matchId: number,
+    @MessageBody('roomId') roomId: number,
+  ): Promise<void> {
+    const user = this.getAuthenticatedUser(client);
+    await this.ensureCanManageRoom(user, roomId);
+    this.logger.log(`Match ${matchId} is being reset`);
+    await this.matchService.reset(matchId, roomId);
+  }
+
+  @UseGuards(WsGuard)
+  @SubscribeMessage(PLAYER_WON_EVENT)
+  async handlePlayerWon(
+    @ConnectedSocket() client: Socket,
+    @MessageBody('roomId') roomId: number,
+    @MessageBody('cardNumber') cardNumber: string,
+    @MessageBody('pattern') pattern: string,
+  ): Promise<void> {
+    const user = this.getAuthenticatedUser(client);
+    this.logger.log(`Player ${user.username} claims BINGO with card ${cardNumber} in room ${roomId}`);
+    
+    // Broadcast to all clients in the room that someone claimed BINGO
+    this.server.to(roomId.toString()).emit(PLAYER_WON_EVENT, {
+      username: user.username,
+      cardNumber,
+      pattern,
+    });
   }
 
   handleConnection(@ConnectedSocket() client: Socket, ...args: any[]): any {

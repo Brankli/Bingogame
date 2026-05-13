@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Amharic Audio Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        button {
+            margin: 5px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        #log {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+    </style>
+</head>
+<body>
+    <h1>🔊 Amharic Audio Test</h1>
+    
+    <div class="section">
+        <h2>Test Numbers</h2>
+        <button onclick="testAudio('numbers/b-1')">B-1</button>
+        <button onclick="testAudio('numbers/b-5')">B-5</button>
+        <button onclick="testAudio('numbers/i-20')">I-20</button>
+        <button onclick="testAudio('numbers/n-35')">N-35</button>
+        <button onclick="testAudio('numbers/g-50')">G-50</button>
+        <button onclick="testAudio('numbers/o-70')">O-70</button>
+    </div>
+    
+    <div class="section">
+        <h2>Test Events</h2>
+        <button onclick="testAudio('events/game-start')">Game Start</button>
+        <button onclick="testAudio('events/game-paused')">Game Paused</button>
+        <button onclick="testAudio('events/game-resumed')">Game Resumed</button>
+        <button onclick="testAudio('events/congratulations')">Congratulations</button>
+        <button onclick="testAudio('events/winner-valid')">Winner Valid</button>
+        <button onclick="testAudio('events/winner-invalid')">Winner Invalid</button>
+        <button onclick="testAudio('events/card-locked')">Card Locked</button>
+        <button onclick="testAudio('events/please-wait')">Please Wait</button>
+        <button onclick="testAudio('events/try-again')">Try Again</button>
+    </div>
+    
+    <div class="section">
+        <h2>Console Log</h2>
+        <div id="log"></div>
+        <button onclick="clearLog()">Clear Log</button>
+    </div>
+
+    <script>
+        let currentAudio = null;
+        
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = type;
+            entry.textContent = `[${timestamp}] ${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+        
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+        
+        async function testAudio(path) {
+            try {
+                // Stop current audio if playing
+                if (currentAudio) {
+                    currentAudio.pause();
+                    currentAudio.currentTime = 0;
+                }
+                
+                const fullPath = `/audio/amharic/${path}.mp3`;
+                log(`Testing: ${fullPath}`, 'info');
+                
+                currentAudio = new Audio(fullPath);
+                
+                // Add event listeners
+                currentAudio.addEventListener('loadeddata', () => {
+                    log(`✅ Audio loaded: ${path}`, 'success');
+                });
+                
+                currentAudio.addEventListener('error', (e) => {
+                    const error = currentAudio.error;
+                    let errorMsg = 'Unknown error';
+                    
+                    if (error) {
+                        switch(error.code) {
+                            case 1: errorMsg = 'MEDIA_ERR_ABORTED - Playback aborted'; break;
+                            case 2: errorMsg = 'MEDIA_ERR_NETWORK - Network error'; break;
+                            case 3: errorMsg = 'MEDIA_ERR_DECODE - Decoding error'; break;
+                            case 4: errorMsg = 'MEDIA_ERR_SRC_NOT_SUPPORTED - File not found or format not supported'; break;
+                        }
+                    }
+                    
+                    log(`❌ Error loading ${path}: ${errorMsg}`, 'error');
+                });
+                
+                currentAudio.addEventListener('canplay', () => {
+                    log(`▶️ Ready to play: ${path}`, 'info');
+                });
+                
+                currentAudio.addEventListener('playing', () => {
+                    log(`🔊 Now playing: ${path}`, 'success');
+                });
+                
+                currentAudio.addEventListener('ended', () => {
+                    log(`✅ Finished playing: ${path}`, 'success');
+                });
+                
+                // Try to play
+                await currentAudio.play();
+                
+            } catch (error) {
+                log(`❌ Exception: ${error.message}`, 'error');
+            }
+        }
+        
+        // Log initial info
+        log('Audio test page loaded. Click buttons to test audio files.', 'info');
+        log(`Base URL: ${window.location.origin}`, 'info');
+    </script>
+</body>
+</html>

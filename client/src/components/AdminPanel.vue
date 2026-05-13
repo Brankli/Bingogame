@@ -1,0 +1,290 @@
+<template>
+  <v-container>
+    <v-card class="admin-panel">
+      <v-card-title class="admin-title">
+        <v-icon class="mr-2">mdi-shield-account</v-icon>
+        Admin Panel
+      </v-card-title>
+
+      <v-tabs v-model="tab">
+        <v-tab value="users">Users</v-tab>
+        <v-tab value="rooms">Room Assignments</v-tab>
+      </v-tabs>
+
+      <v-card-text>
+        <v-window v-model="tab">
+          <!-- Users Tab -->
+          <v-window-item value="users">
+            <v-row class="mb-4">
+              <v-col cols="12">
+                <v-btn color="primary" @click="showCreateUser = true">
+                  <v-icon>mdi-account-plus</v-icon>
+                  Create User
+                </v-btn>
+              </v-col>
+            </v-row>
+
+            <v-table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Username</th>
+                  <th>Role</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="user in users" :key="user.id">
+                  <td>{{ user.id }}</td>
+                  <td>{{ user.username }}</td>
+                  <td>
+                    <v-chip :color="user.role === 'admin' ? 'error' : 'primary'" size="small">
+                      {{ user.role }}
+                    </v-chip>
+                  </td>
+                  <td>
+                    <v-btn size="small" color="error" @click="deleteUser(user.id)" v-if="user.id !== currentUser?.id">
+                      <v-icon>mdi-delete</v-icon>
+                    </v-btn>
+                  </td>
+                </tr>
+              </tbody>
+            </v-table>
+          </v-window-item>
+
+          <!-- Room Assignments Tab -->
+          <v-window-item value="rooms">
+            <v-row>
+              <v-col cols="12" md="6">
+                <v-select
+                  v-model="selectedUser"
+                  :items="users"
+                  item-title="username"
+                  item-value="id"
+                  label="Select User"
+                  variant="outlined"
+                ></v-select>
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-select
+                  v-model="selectedRoom"
+                  :items="rooms"
+                  item-title="name"
+                  item-value="id"
+                  label="Select Room"
+                  variant="outlined"
+                ></v-select>
+              </v-col>
+              <v-col cols="12">
+                <v-btn color="success" @click="assignManager" :disabled="!selectedUser || !selectedRoom">
+                  <v-icon>mdi-link</v-icon>
+                  Assign Room Manager
+                </v-btn>
+              </v-col>
+            </v-row>
+
+            <v-divider class="my-4"></v-divider>
+
+            <h3 class="mb-4">Current Assignments</h3>
+            <v-table>
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Room</th>
+                  <th>Assigned At</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="assignment in assignments" :key="`${assignment.userId}-${assignment.roomId}`">
+                  <td>{{ getUserName(assignment.userId) }}</td>
+                  <td>{{ getRoomName(assignment.roomId) }}</td>
+                  <td>{{ formatDate(assignment.assignedAt) }}</td>
+                  <td>
+                    <v-btn size="small" color="error" @click="removeManager(assignment.userId, assignment.roomId)">
+                      <v-icon>mdi-link-off</v-icon>
+                    </v-btn>
+                  </td>
+                </tr>
+              </tbody>
+            </v-table>
+          </v-window-item>
+        </v-window>
+      </v-card-text>
+    </v-card>
+
+    <!-- Create User Dialog -->
+    <v-dialog v-model="showCreateUser" max-width="500">
+      <v-card>
+        <v-card-title>Create New User</v-card-title>
+        <v-card-text>
+          <v-text-field
+            v-model="newUser.username"
+            label="Username"
+            variant="outlined"
+            class="mb-2"
+          ></v-text-field>
+          <v-text-field
+            v-model="newUser.password"
+            label="Password"
+            type="password"
+            variant="outlined"
+            class="mb-2"
+          ></v-text-field>
+          <v-select
+            v-model="newUser.role"
+            :items="['user', 'admin']"
+            label="Role"
+            variant="outlined"
+          ></v-select>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn @click="showCreateUser = false">Cancel</v-btn>
+          <v-btn color="primary" @click="createUser">Create</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+  </v-container>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted, inject } from 'vue';
+import { Services } from '@/services';
+import { useAuth } from '@/store/auth';
+
+const services = inject<Services>('services');
+const auth = useAuth();
+const { user: currentUser } = auth;
+
+const tab = ref('users');
+const users = ref<any[]>([]);
+const rooms = ref<any[]>([]);
+const assignments = ref<any[]>([]);
+const selectedUser = ref<number | null>(null);
+const selectedRoom = ref<number | null>(null);
+const showCreateUser = ref(false);
+const newUser = ref({
+  username: '',
+  password: '',
+  role: 'user',
+});
+
+const loadUsers = async () => {
+  const response = await services?.userService.findAll();
+  users.value = response?.data || [];
+};
+
+const loadRooms = async () => {
+  const response = await services?.roomService.findAll();
+  rooms.value = response?.data || [];
+};
+
+const loadAssignments = async () => {
+  // Load all rooms with their managers
+  const response = await services?.roomService.findAll();
+  const allRooms = response?.data || [];
+  
+  const allAssignments: any[] = [];
+  allRooms.forEach((room: any) => {
+    if (room.managers) {
+      room.managers.forEach((manager: any) => {
+        allAssignments.push({
+          userId: manager.user.id,
+          roomId: room.id,
+          assignedAt: manager.assignedAt,
+        });
+      });
+    }
+  });
+  
+  assignments.value = allAssignments;
+};
+
+const createUser = async () => {
+  try {
+    await services?.authService.register(newUser.value);
+    showCreateUser.value = false;
+    newUser.value = { username: '', password: '', role: 'user' };
+    await loadUsers();
+    alert('User created successfully');
+  } catch (error) {
+    console.error('Error creating user:', error);
+    alert('Failed to create user');
+  }
+};
+
+const deleteUser = async (userId: number) => {
+  if (!confirm('Are you sure you want to delete this user?')) return;
+  
+  try {
+    await services?.userService.remove(userId);
+    await loadUsers();
+    alert('User deleted successfully');
+  } catch (error) {
+    console.error('Error deleting user:', error);
+    alert('Failed to delete user');
+  }
+};
+
+const assignManager = async () => {
+  if (!selectedUser.value || !selectedRoom.value) return;
+  
+  try {
+    await services?.roomService.assignManager(selectedUser.value, selectedRoom.value);
+    selectedUser.value = null;
+    selectedRoom.value = null;
+    await loadAssignments();
+    alert('Manager assigned successfully');
+  } catch (error) {
+    console.error('Error assigning manager:', error);
+    alert('Failed to assign manager');
+  }
+};
+
+const removeManager = async (userId: number, roomId: number) => {
+  if (!confirm('Are you sure you want to remove this assignment?')) return;
+  
+  try {
+    await services?.roomService.removeManager(userId, roomId);
+    await loadAssignments();
+    alert('Manager removed successfully');
+  } catch (error) {
+    console.error('Error removing manager:', error);
+    alert('Failed to remove manager');
+  }
+};
+
+const getUserName = (userId: number) => {
+  const user = users.value.find((u) => u.id === userId);
+  return user?.username || 'Unknown';
+};
+
+const getRoomName = (roomId: number) => {
+  const room = rooms.value.find((r) => r.id === roomId);
+  return room?.name || 'Unknown';
+};
+
+const formatDate = (date: string) => {
+  return new Date(date).toLocaleString();
+};
+
+onMounted(async () => {
+  await loadUsers();
+  await loadRooms();
+  await loadAssignments();
+});
+</script>
+
+<style scoped lang="scss">
+.admin-panel {
+  margin: 20px auto;
+  max-width: 1200px;
+}
+
+.admin-title {
+  background: linear-gradient(135deg, #d32f2f 0%, #c62828 100%);
+  color: white;
+  font-weight: bold;
+}
+</style>

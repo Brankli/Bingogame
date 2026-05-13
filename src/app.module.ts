@@ -17,7 +17,10 @@ import { Match } from './match/entities/match.entity';
 import { MatchNumber } from './match/entities/match-number.entity';
 import * as redisStore from 'cache-manager-redis-store';
 import type { ClientOpts } from 'redis';
-import { RoomPrize } from "./room/entities/room-prize.entity";
+import { RoomPrize } from './room/entities/room-prize.entity';
+import { CardModule } from './card/card.module';
+import { Card } from './card/entities/card.entity';
+import { RoomManager } from './room/entities/room-manager.entity';
 
 @Module({
   imports: [
@@ -34,7 +37,7 @@ import { RoomPrize } from "./room/entities/room-prize.entity";
         username: configService.get<string>('DB_USER'),
         password: configService.get<string>('DB_PASS'),
         database: configService.get<string>('DB_NAME'),
-        entities: [Room, RoomPrize, User, Match, MatchNumber],
+        entities: [Room, RoomPrize, RoomManager, User, Match, MatchNumber, Card],
         synchronize: true,
       }),
       inject: [ConfigService],
@@ -57,6 +60,7 @@ import { RoomPrize } from "./room/entities/room-prize.entity";
     UserModule,
     SocketsModule,
     MatchModule,
+    CardModule,
   ],
   controllers: [AppController],
   providers: [AppService],

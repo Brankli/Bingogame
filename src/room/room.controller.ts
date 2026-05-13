@@ -5,6 +5,7 @@ import {
   Body,
   Param,
   Delete,
+  ForbiddenException,
   UseGuards,
 } from '@nestjs/common';
 import { RoomService } from './room.service';
@@ -19,12 +20,18 @@ import {
   BINGO_ONE_START_BALLS,
   BINGO_SUPER_START_BALLS,
 } from './consts/room.consts';
+import { AssignManagerDto } from './dto/assign-manager.dto';
+import { Roles } from '../decorators/roles.decorator';
+import { UserRole } from '../user/entities/user.entity';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { RoomManagerGuard } from '../auth/guards/room-manager.guard';
 
 @Controller('rooms')
 export class RoomController {
   constructor(private readonly roomService: RoomService) {}
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
   @Post()
   async create(
     @User() user,
@@ -47,11 +54,14 @@ export class RoomController {
     return mapToRoomDto(room);
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.roomService.remove(+id);
   }
 
+  @UseGuards(JwtAuthGuard, RoomManagerGuard)
   @Post(':id/ticket-price')
   async ticketPrice(
     @Param('id') id: number,
@@ -63,6 +73,7 @@ export class RoomController {
     return mapToRoomDto(room);
   }
 
+  @UseGuards(JwtAuthGuard, RoomManagerGuard)
   @Post(':id/reset-prize')
   async resetPrize(
     @Param('id') id: number,
@@ -89,5 +100,62 @@ export class RoomController {
 
     room = await this.roomService.update(id, { roomPrize });
     return mapToRoomDto(room);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Post('assign-manager')
+  async assignManager(@Body() assignManagerDto: AssignManagerDto) {
+    return this.roomService.assignManager(
+      assignManagerDto.userId,
+      assignManagerDto.roomId,
+    );
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Post('remove-manager')
+  async removeManager(@Body() assignManagerDto: AssignManagerDto) {
+    await this.roomService.removeManager(
+      assignManagerDto.userId,
+      assignManagerDto.roomId,
+    );
+    return { success: true };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('user/:userId/managed')
+  async getUserManagedRooms(@Param('userId') userId: number, @User() user) {
+    const requestedUserId = Number(userId);
+    const requesterIsAdmin = user?.role === UserRole.ADMIN;
+    if (!requesterIsAdmin && user?.id !== requestedUserId) {
+      throw new ForbiddenException('You can only access your own managed rooms');
+    }
+
+    const rooms = await this.roomService.getUserManagedRooms(requestedUserId);
+    return rooms.map(mapToRoomDto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/can-manage')
+  async canManageRoom(@Param('id') roomId: number, @User() user) {
+    const canManage = await this.roomService.canManageRoom(
+      user.id,
+      roomId,
+      user.role,
+    );
+    return { canManage };
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Post('cleanup-invalid-managers')
+  async cleanupInvalidManagers() {
+    const count = await this.roomService.cleanupInvalidManagers();
+    return { 
+      success: true, 
+      message: `Cleaned up ${count} invalid manager assignment(s)`,
+      count 
+    };
   }
 }

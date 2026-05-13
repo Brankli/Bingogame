@@ -11,5 +11,17 @@ export const useAuth = defineStore('auth', () => {
         user.value = newUser;
     }
 
-    return { user, logged, setUser };
+    function logout() {
+        user.value = null;
+        // Clear token from localStorage
+        localStorage.removeItem('token');
+        // Clear any cookies
+        document.cookie.split(";").forEach((c) => {
+            document.cookie = c
+                .replace(/^ +/, "")
+                .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+        });
+    }
+
+    return { user, logged, setUser, logout };
 })

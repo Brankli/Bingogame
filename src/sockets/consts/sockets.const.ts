@@ -8,3 +8,7 @@ export const NEW_MATCH_STARTED_EVENT = 'new-match-started';
 export const PAUSE_MATCH_EVENT = 'pause-match';
 export const PLAY_MATCH_EVENT = 'play-match';
 export const BINGO_ONE_STARTED_EVENT = 'bingo-one-started';
+export const MATCH_PAUSED_EVENT = 'match-paused';
+export const MATCH_RESET_EVENT = 'match-reset';
+export const RESET_MATCH_EVENT = 'reset-match';
+export const PLAYER_WON_EVENT = 'player-won';
