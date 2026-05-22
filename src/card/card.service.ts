@@ -419,6 +419,7 @@ export class CardService {
     specialWin?: boolean;
     lastCalledNumber?: number; // NEW: The number that completed the win
     unregistered?: boolean; // NEW: Flag for unregistered cards
+    lateClaim?: boolean; // NEW: Flag for late claims (pattern completed earlier)
   }> {
     const card = await this.findOne(verifyDto.cardNumber);
 
