@@ -9,10 +9,7 @@
   },
   "dependencies": {
     "@mdi/font": "^7.0.96",
-    "@nestjs/mapped-types": "*",
-    "@nestjs/platform-ws": "^9.2.1",
     "axios": "^1.2.0",
-    "cache-manager": "^5.1.4",
     "cookie": "^0.5.0",
     "core-js": "^3.8.3",
     "js-cookie": "^3.0.1",

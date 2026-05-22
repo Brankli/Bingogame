@@ -1,4 +1,5 @@
 import {
+  BeforeInsert,
   Column,
   Entity,
   JoinColumn,
@@ -34,11 +35,18 @@ export class Room {
   })
   managers?: RoomManager[];
 
-  @Column({ type: 'datetime', default: () => 'NOW' })
+  @Column({ type: 'datetime', nullable: true })
   createdAt!: Date;
 
-  @Column({ type: 'datetime', default: null })
+  @Column({ type: 'datetime', nullable: true })
   startedAt!: Date;
+
+  @BeforeInsert()
+  setCreatedAt() {
+    if (!this.createdAt) {
+      this.createdAt = new Date();
+    }
+  }
 
   @OneToMany(() => Match, (match) => match.room, {
     cascade: true,

@@ -150,22 +150,59 @@ const viewCard = (card: any) => {
 .cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
-  gap: 8px;
-  max-height: 600px;
-  overflow-y: auto;
-  padding: 8px;
+  gap: 10px;
+  padding: 12px;
   background: #1a1a2e;
   border-radius: 8px;
+  width: 100%;
+}
+
+/* Responsive grid for different screen sizes */
+@media (min-width: 1920px) {
+  .cards-grid {
+    grid-template-columns: repeat(20, 1fr);
+    gap: 12px;
+  }
+}
+
+@media (min-width: 1600px) and (max-width: 1919px) {
+  .cards-grid {
+    grid-template-columns: repeat(16, 1fr);
+    gap: 10px;
+  }
+}
+
+@media (min-width: 1200px) and (max-width: 1599px) {
+  .cards-grid {
+    grid-template-columns: repeat(13, 1fr);
+    gap: 9px;
+  }
+}
+
+@media (min-width: 900px) and (max-width: 1199px) {
+  .cards-grid {
+    grid-template-columns: repeat(10, 1fr);
+    gap: 8px;
+  }
+}
+
+@media (max-width: 899px) {
+  .cards-grid {
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px;
+  }
 }
 
 .card-button {
-  min-width: 70px !important;
-  height: 60px !important;
-  font-size: 1.1rem !important;
+  width: 100% !important;
+  aspect-ratio: 1 / 1 !important;
+  min-width: 60px !important;
+  font-size: 1.2rem !important;
   font-weight: bold !important;
   border-radius: 8px !important;
-  transition: all 0.3s !important;
+  transition: all 0.2s ease !important;
   color: white !important;
+  padding: 4px !important;
   
   /* Default - Purple */
   &.color-purple {
@@ -174,13 +211,27 @@ const viewCard = (card: any) => {
   
   /* Selected - Red */
   &.selected {
-    transform: scale(1.1);
-    box-shadow: 0 0 20px rgba(211, 47, 47, 0.8) !important;
+    transform: scale(1.05);
+    box-shadow: 0 0 15px rgba(211, 47, 47, 0.8) !important;
     background: linear-gradient(135deg, #d32f2f 0%, #c62828 100%) !important;
+    z-index: 1;
   }
   
   &:hover {
-    transform: scale(1.05);
+    transform: scale(1.08);
+    z-index: 2;
+  }
+}
+
+@media (min-width: 1600px) {
+  .card-button {
+    font-size: 1.4rem !important;
+  }
+}
+
+@media (max-width: 899px) {
+  .card-button {
+    font-size: 1rem !important;
   }
 }
 

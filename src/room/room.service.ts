@@ -14,6 +14,9 @@ import { Match } from '../match/entities/match.entity';
 import { RoomPrize } from './entities/room-prize.entity';
 import { mapToRoomDto } from './dto/room.dto';
 import { RoomManager } from './entities/room-manager.entity';
+import { CardService } from '../card/card.service';
+import { Card } from '../card/entities/card.entity';
+import { CreateMatchDto } from '../match/dto/create-match.dto';
 
 @Injectable()
 export class RoomService {
@@ -27,8 +30,14 @@ export class RoomService {
     @InjectRepository(RoomManager)
     private readonly roomManagerRepository: Repository<RoomManager>,
 
+    @InjectRepository(Card)
+    private readonly cardRepository: Repository<Card>,
+
     @Inject(forwardRef(() => MatchService))
     private readonly matchService: MatchService,
+
+    @Inject(forwardRef(() => CardService))
+    private readonly cardService: CardService,
 
     private readonly socketsGateway: SocketsGateway,
   ) {}
@@ -40,10 +49,153 @@ export class RoomService {
       roomPrize: new RoomPrize(),
     });
 
+    console.log(`[RoomService] Room created with ID: ${room.id}, generating cards...`);
+    
+    // Automatically generate 400 cards for this room
+    try {
+      await this.generateCardsForRoom(room.id);
+      console.log(`[RoomService] Successfully generated cards for room ${room.id}`);
+    } catch (error) {
+      console.error(`[RoomService] Error generating cards for room ${room.id}:`, error);
+    }
+
     this.socketsGateway.server.emit(NEW_ROOM_AVAILABLE_EVENT);
     // await this.startMatch(room, createRoomDto.soldCards);
 
     return this.findOne(room.id);
+  }
+
+  /**
+   * Generate 400 unique cards for a specific room
+   */
+  private async generateCardsForRoom(roomId: number): Promise<void> {
+    console.log(`[RoomService] Starting card generation for room ${roomId}...`);
+    const cards: Card[] = [];
+    
+    for (let i = 1; i <= 400; i++) {
+      // Generate unique card number for this room (matching frontend format)
+      const cardNumber = `ROOM${roomId}-CAR${String(i).padStart(4, '0')}`;
+      
+      // Check if card already exists
+      const existingCard = await this.cardRepository.findOne({
+        where: { cardNumber },
+      });
+
+      if (!existingCard) {
+        // Use room ID and card index as seed for reproducible cards
+        const seed = roomId * 10000 + i * 1000;
+        const grid = this.cardService.generateCard(seed);
+        
+        const card = this.cardRepository.create({
+          cardNumber,
+          grid: JSON.stringify(grid),
+          isActive: true,
+          room: { id: roomId } as Room,
+        });
+        cards.push(card);
+      }
+    }
+
+    console.log(`[RoomService] Created ${cards.length} card entities, saving to database...`);
+    
+    if (cards.length > 0) {
+      await this.cardRepository.save(cards);
+      console.log(`[RoomService] Successfully saved ${cards.length} cards to database`);
+    } else {
+      console.log(`[RoomService] No new cards to save (all already exist)`);
+    }
+  }
+
+  /**
+   * Public method to generate cards for existing rooms
+   */
+  async generateCardsForExistingRoom(roomId: number): Promise<{ generated: number }> {
+    const room = await this.findOne(roomId);
+    if (!room) {
+      throw new NotFoundException('Room not found');
+    }
+
+    // Count existing cards for this room
+    const existingCount = await this.cardRepository.count({
+      where: { room: { id: roomId } },
+    });
+
+    if (existingCount >= 400) {
+      return { generated: 0 };
+    }
+
+    await this.generateCardsForRoom(roomId);
+
+    // Count cards after generation
+    const newCount = await this.cardRepository.count({
+      where: { room: { id: roomId } },
+    });
+
+    return { generated: newCount - existingCount };
+  }
+
+  /**
+   * Copy cards from one room to another
+   */
+  async copyCardsFromRoom(sourceRoomId: number, targetRoomId: number): Promise<{ copied: number }> {
+    const sourceRoom = await this.findOne(sourceRoomId);
+    const targetRoom = await this.findOne(targetRoomId);
+    
+    if (!sourceRoom) {
+      throw new NotFoundException('Source room not found');
+    }
+    if (!targetRoom) {
+      throw new NotFoundException('Target room not found');
+    }
+
+    // Get all cards from source room
+    const sourceCards = await this.cardRepository.find({
+      where: { room: { id: sourceRoomId } },
+      order: { cardNumber: 'ASC' },
+    });
+
+    if (sourceCards.length === 0) {
+      throw new NotFoundException('Source room has no cards to copy');
+    }
+
+    // Check if target room already has cards
+    const existingCount = await this.cardRepository.count({
+      where: { room: { id: targetRoomId } },
+    });
+
+    if (existingCount > 0) {
+      throw new Error('Target room already has cards. Delete them first or choose a different room.');
+    }
+
+    // Copy cards to target room
+    const newCards: Card[] = [];
+    for (const sourceCard of sourceCards) {
+      // Parse the grid
+      let grid: number[][];
+      try {
+        grid = typeof sourceCard.grid === 'string' 
+          ? JSON.parse(sourceCard.grid) 
+          : sourceCard.grid;
+      } catch {
+        grid = this.cardService.generateCard(Date.now());
+      }
+
+      // Create new card number for target room
+      const cardIndex = sourceCard.cardNumber.match(/CARD(\d+)/)?.[1] || '001';
+      const newCardNumber = `ROOM${targetRoomId}-CARD${cardIndex}`;
+
+      const newCard = this.cardRepository.create({
+        cardNumber: newCardNumber,
+        grid: JSON.stringify(grid),
+        isActive: true,
+        room: { id: targetRoomId } as Room,
+      });
+      newCards.push(newCard);
+    }
+
+    await this.cardRepository.save(newCards);
+
+    return { copied: newCards.length };
   }
 
   async findAll(): Promise<Room[]> {
@@ -127,8 +279,8 @@ export class RoomService {
     await this.roomRepository.save(room);
   }
 
-  async startMatch(room: Room, soldCards: number): Promise<Match> {
-    const match = await this.matchService.create(room, { soldCards });
+  async startMatch(room: Room, createMatchDto: CreateMatchDto): Promise<Match> {
+    const match = await this.matchService.create(room, createMatchDto);
     room = await this.findOne(room.id);
 
     this.socketsGateway.server
@@ -144,6 +296,8 @@ export class RoomService {
   async closeMatches(roomId: number): Promise<Room> {
     const room = await this.findOne(roomId);
     for await (const match of room.matches) {
+      // Unlock all cards for this match before closing
+      await this.cardService.unlockCardsForMatch(match.id);
       await this.matchService.close(match);
     }
 

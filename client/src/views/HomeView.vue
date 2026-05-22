@@ -1,127 +1,283 @@
 <template>
-  <div class="home-container">
-    <!-- Header with Logout -->
-    <v-app-bar color="primary" dark elevation="4" v-if="logged">
-      <v-toolbar-title>
-        <v-icon class="mr-2">mdi-cards</v-icon>
-        Bingo Game
-      </v-toolbar-title>
+  <div class="modern-home-container">
+    <!-- Modern Header -->
+    <v-app-bar color="white" elevation="1" class="modern-header" v-if="logged">
+      <v-container class="d-flex align-center">
+        <div class="d-flex align-center">
+          <v-avatar color="primary" size="40" class="mr-3">
+            <v-icon color="white">mdi-cards</v-icon>
+          </v-avatar>
+          <div>
+            <div class="app-name">Bingo Game</div>
+            <div class="app-tagline">Play & Win</div>
+          </div>
+        </div>
 
-      <v-spacer></v-spacer>
+        <v-spacer></v-spacer>
 
-      <v-chip class="mr-3" color="white" text-color="primary">
-        <v-icon left small>mdi-account</v-icon>
-        {{ user?.username }}
-      </v-chip>
+        <v-chip class="user-chip mr-3" variant="flat" color="primary">
+          <v-avatar start color="white">
+            <v-icon color="primary" size="small">mdi-account</v-icon>
+          </v-avatar>
+          {{ user?.username }}
+        </v-chip>
 
-      <v-btn icon @click="confirmLogout">
-        <v-icon>mdi-logout</v-icon>
-      </v-btn>
+        <v-btn icon variant="text" @click="confirmLogout" class="logout-btn">
+          <v-icon>mdi-logout</v-icon>
+        </v-btn>
+      </v-container>
     </v-app-bar>
 
-    <v-container class="welcome-section">
-      <v-card class="welcome-card" elevation="6">
-        <v-card-title class="welcome-title">
-          <v-icon class="mr-2">mdi-cards</v-icon>
-          Welcome to Bingo Game
-        </v-card-title>
-        <v-card-text class="pa-6">
-          <v-alert v-if="isAdmin" type="info" variant="tonal" class="mb-4">
-            <v-icon class="mr-2">mdi-shield-admin</v-icon>
-            You are logged in as admin. Room management, user management, privilege control,
-            and registration are available in the admin dashboard.
-          </v-alert>
-
-          <v-alert v-else type="info" variant="tonal" class="mb-4">
-            <v-icon class="mr-2">mdi-information</v-icon>
-            Rooms are managed by administrators. Your assigned manager rooms appear below.
-          </v-alert>
-
-          <div class="actions">
-            <v-btn
-              v-if="isAdmin"
-              color="primary"
-              size="large"
-              @click="goToAdminDashboard"
-            >
-              <v-icon class="mr-2">mdi-view-dashboard</v-icon>
-              Open Admin Dashboard
-            </v-btn>
-            <v-alert v-else-if="!logged" type="warning" variant="tonal">
-              <v-icon class="mr-2">mdi-lock</v-icon>
-              Please login. Ask an administrator to create your account.
-            </v-alert>
+    <!-- Hero Section -->
+    <div class="hero-section">
+      <v-container>
+        <div class="hero-content">
+          <div class="hero-icon-wrapper">
+            <v-avatar color="white" size="120" class="hero-icon">
+              <v-icon size="60" color="primary">mdi-cards-playing-outline</v-icon>
+            </v-avatar>
           </div>
+          
+          <h1 class="hero-title">Welcome to Bingo Game</h1>
+          <p class="hero-subtitle">Your ultimate bingo gaming experience</p>
 
-          <div v-if="logged && !isAdmin" class="mt-4">
-            <v-card variant="outlined" class="managed-rooms-card">
-              <v-card-title class="text-h6">
-                <v-icon class="mr-2">mdi-office-building-cog</v-icon>
-                My Assigned Rooms
-              </v-card-title>
-              <v-card-text>
-                <v-progress-linear
-                  v-if="loadingManagedRooms"
-                  indeterminate
-                  color="primary"
-                  class="mb-3"
-                />
+          <!-- Admin Section -->
+          <v-card v-if="isAdmin" class="action-card admin-card" elevation="8">
+            <v-card-text class="pa-6">
+              <div class="d-flex align-center mb-4">
+                <v-avatar color="primary" size="48" class="mr-3">
+                  <v-icon color="white">mdi-shield-crown</v-icon>
+                </v-avatar>
+                <div>
+                  <h3 class="text-h6 font-weight-bold mb-1">Administrator Access</h3>
+                  <p class="text-body-2 text-grey mb-0">
+                    Manage rooms, users, and game settings
+                  </p>
+                </div>
+              </div>
 
-                <v-alert v-else-if="managedRooms.length === 0" type="warning" variant="tonal">
-                  No room assigned yet. Please ask admin to assign you as room manager.
-                </v-alert>
+              <v-divider class="my-4"></v-divider>
 
-                <v-row v-else>
-                  <v-col v-for="room in managedRooms" :key="room.id" cols="12" md="6">
-                    <v-card class="room-card" elevation="2">
-                      <v-card-title class="d-flex align-center justify-space-between">
-                        <span>{{ room.name }}</span>
-                        <v-chip color="success" size="small">ASSIGNED</v-chip>
-                      </v-card-title>
-                      <v-card-text>
-                        <div class="text-caption mb-2">
-                          Ticket price: {{ Number(room.ticketPrice || 0).toFixed(2) }}
+              <div class="admin-features mb-4">
+                <div class="feature-item">
+                  <v-icon color="primary" size="small">mdi-check-circle</v-icon>
+                  <span>Room Management</span>
+                </div>
+                <div class="feature-item">
+                  <v-icon color="primary" size="small">mdi-check-circle</v-icon>
+                  <span>User Control</span>
+                </div>
+                <div class="feature-item">
+                  <v-icon color="primary" size="small">mdi-check-circle</v-icon>
+                  <span>Card Management</span>
+                </div>
+                <div class="feature-item">
+                  <v-icon color="primary" size="small">mdi-check-circle</v-icon>
+                  <span>Privilege Settings</span>
+                </div>
+              </div>
+
+              <v-btn
+                color="primary"
+                size="x-large"
+                block
+                elevation="2"
+                @click="goToAdminDashboard"
+                class="admin-btn"
+              >
+                <v-icon class="mr-2">mdi-view-dashboard</v-icon>
+                Open Admin Dashboard
+              </v-btn>
+            </v-card-text>
+          </v-card>
+
+          <!-- Non-Admin Section -->
+          <div v-else>
+            <!-- Not Logged In -->
+            <v-card v-if="!logged" class="action-card warning-card" elevation="8">
+              <v-card-text class="pa-6 text-center">
+                <v-avatar color="warning" size="64" class="mb-4">
+                  <v-icon color="white" size="32">mdi-lock-alert</v-icon>
+                </v-avatar>
+                <h3 class="text-h6 font-weight-bold mb-2">Authentication Required</h3>
+                <p class="text-body-2 text-grey mb-4">
+                  Please contact an administrator to create your account
+                </p>
+                <v-btn color="warning" variant="outlined" size="large">
+                  <v-icon class="mr-2">mdi-email</v-icon>
+                  Contact Admin
+                </v-btn>
+              </v-card-text>
+            </v-card>
+
+            <!-- Logged In - Manager View -->
+            <v-card v-else class="action-card manager-card" elevation="8">
+              <v-card-text class="pa-6">
+                <div class="d-flex align-center mb-4">
+                  <v-avatar color="success" size="48" class="mr-3">
+                    <v-icon color="white">mdi-account-tie</v-icon>
+                  </v-avatar>
+                  <div>
+                    <h3 class="text-h6 font-weight-bold mb-1">Room Manager</h3>
+                    <p class="text-body-2 text-grey mb-0">
+                      Your assigned rooms
+                    </p>
+                  </div>
+                </div>
+
+                <v-divider class="my-4"></v-divider>
+
+                <!-- Loading State -->
+                <div v-if="loadingManagedRooms" class="text-center py-8">
+                  <v-progress-circular
+                    indeterminate
+                    color="primary"
+                    size="48"
+                    class="mb-3"
+                  ></v-progress-circular>
+                  <p class="text-body-2 text-grey">Loading your rooms...</p>
+                </div>
+
+                <!-- No Rooms -->
+                <div v-else-if="managedRooms.length === 0" class="empty-state">
+                  <v-icon size="80" color="grey-lighten-1" class="mb-3">mdi-office-building-outline</v-icon>
+                  <h4 class="text-h6 mb-2">No Rooms Assigned</h4>
+                  <p class="text-body-2 text-grey">
+                    Please ask an administrator to assign you as a room manager
+                  </p>
+                </div>
+
+                <!-- Rooms List -->
+                <div v-else class="rooms-grid">
+                  <v-card
+                    v-for="room in managedRooms"
+                    :key="room.id"
+                    class="room-item"
+                    elevation="2"
+                    hover
+                  >
+                    <v-card-text class="pa-4">
+                      <div class="d-flex align-center justify-space-between mb-3">
+                        <h4 class="text-h6 font-weight-bold">{{ room.name }}</h4>
+                        <v-chip color="success" size="small" variant="flat">
+                          <v-icon size="x-small" class="mr-1">mdi-check</v-icon>
+                          ACTIVE
+                        </v-chip>
+                      </div>
+
+                      <div class="room-info mb-3">
+                        <div class="info-item">
+                          <v-icon size="small" color="grey">mdi-currency-usd</v-icon>
+                          <span>{{ Number(room.ticketPrice || 0).toFixed(2) }} Birr</span>
                         </div>
-                        <v-btn
-                          color="primary"
-                          variant="elevated"
-                          size="small"
-                          @click="openManagedRoom(room.id)"
-                        >
-                          <v-icon class="mr-1">mdi-login-variant</v-icon>
-                          Open Room
-                        </v-btn>
-                      </v-card-text>
-                    </v-card>
-                  </v-col>
-                </v-row>
+                      </div>
+
+                      <v-btn
+                        color="primary"
+                        variant="elevated"
+                        block
+                        @click="openManagedRoom(room.id)"
+                      >
+                        <v-icon class="mr-2">mdi-login-variant</v-icon>
+                        Enter Room
+                      </v-btn>
+                    </v-card-text>
+                  </v-card>
+                </div>
               </v-card-text>
             </v-card>
           </div>
-        </v-card-text>
-      </v-card>
-    </v-container>
+        </div>
+      </v-container>
+    </div>
+
+    <!-- Features Section -->
+    <div class="features-section">
+      <v-container>
+        <h2 class="section-title text-center mb-8">Why Choose Our Platform?</h2>
+        <v-row>
+          <v-col cols="12" md="4">
+            <div class="feature-card">
+              <v-avatar color="primary" size="64" class="mb-4">
+                <v-icon color="white" size="32">mdi-lightning-bolt</v-icon>
+              </v-avatar>
+              <h3 class="text-h6 font-weight-bold mb-2">Fast & Reliable</h3>
+              <p class="text-body-2 text-grey">
+                Real-time gameplay with instant updates and smooth performance
+              </p>
+            </div>
+          </v-col>
+          <v-col cols="12" md="4">
+            <div class="feature-card">
+              <v-avatar color="success" size="64" class="mb-4">
+                <v-icon color="white" size="32">mdi-shield-check</v-icon>
+              </v-avatar>
+              <h3 class="text-h6 font-weight-bold mb-2">Secure Platform</h3>
+              <p class="text-body-2 text-grey">
+                Your data and gameplay are protected with enterprise-grade security
+              </p>
+            </div>
+          </v-col>
+          <v-col cols="12" md="4">
+            <div class="feature-card">
+              <v-avatar color="warning" size="64" class="mb-4">
+                <v-icon color="white" size="32">mdi-trophy</v-icon>
+              </v-avatar>
+              <h3 class="text-h6 font-weight-bold mb-2">Win Big</h3>
+              <p class="text-body-2 text-grey">
+                Exciting prizes and rewards for winners in every game
+              </p>
+            </div>
+          </v-col>
+        </v-row>
+      </v-container>
+    </div>
+
+    <!-- Footer -->
+    <div class="modern-footer">
+      <v-container>
+        <div class="text-center">
+          <p class="text-body-2 text-grey mb-2">
+            © 2024 Bingo Game. All rights reserved.
+          </p>
+          <p class="text-caption text-grey">
+            Powered by modern web technologies
+          </p>
+        </div>
+      </v-container>
+    </div>
 
     <!-- Logout Confirmation Dialog -->
     <v-dialog v-model="showLogoutDialog" max-width="400">
-      <v-card>
-        <v-card-title class="text-h5">
-          <v-icon class="mr-2" color="warning">mdi-logout</v-icon>
-          Confirm Logout
-        </v-card-title>
-        <v-card-text>
-          Are you sure you want to logout?
+      <v-card class="logout-dialog">
+        <v-card-text class="pa-6 text-center">
+          <v-avatar color="warning" size="64" class="mb-4">
+            <v-icon color="white" size="32">mdi-logout</v-icon>
+          </v-avatar>
+          <h3 class="text-h6 font-weight-bold mb-2">Confirm Logout</h3>
+          <p class="text-body-2 text-grey mb-4">
+            Are you sure you want to logout?
+          </p>
+          <div class="d-flex gap-2">
+            <v-btn
+              color="grey"
+              variant="outlined"
+              block
+              @click="showLogoutDialog = false"
+            >
+              Cancel
+            </v-btn>
+            <v-btn
+              color="error"
+              variant="elevated"
+              block
+              @click="logout"
+            >
+              <v-icon class="mr-1">mdi-logout</v-icon>
+              Logout
+            </v-btn>
+          </div>
         </v-card-text>
-        <v-card-actions>
-          <v-spacer></v-spacer>
-          <v-btn color="grey" variant="text" @click="showLogoutDialog = false">
-            Cancel
-          </v-btn>
-          <v-btn color="error" variant="elevated" @click="logout">
-            <v-icon class="mr-1">mdi-logout</v-icon>
-            Logout
-          </v-btn>
-        </v-card-actions>
       </v-card>
     </v-dialog>
   </div>
@@ -232,37 +388,252 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped lang="scss">
-.home-container {
-  min-height: 80vh;
+.modern-home-container {
+  min-height: 100vh;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 40px 0;
+  position: relative;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+      radial-gradient(circle at 20% 50%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
+    pointer-events: none;
+  }
 }
 
-.welcome-section {
-  max-width: 900px;
+/* Modern Header */
+.modern-header {
+  background: white !important;
+  border-bottom: 1px solid #e0e0e0;
+  
+  .app-name {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #2c3e50;
+    line-height: 1.2;
+  }
+  
+  .app-tagline {
+    font-size: 0.75rem;
+    color: #8898aa;
+    line-height: 1.2;
+  }
+  
+  .user-chip {
+    font-weight: 600;
+  }
+  
+  .logout-btn {
+    color: #5a6c7d;
+  }
+}
+
+/* Hero Section */
+.hero-section {
+  padding: 80px 0 60px;
+  position: relative;
+  z-index: 1;
+}
+
+.hero-content {
+  max-width: 700px;
   margin: 0 auto;
+  text-align: center;
 }
 
-.welcome-card {
-  border-radius: 12px !important;
+.hero-icon-wrapper {
+  margin-bottom: 32px;
+  animation: float 3s ease-in-out infinite;
+  
+  .hero-icon {
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  }
 }
 
-.welcome-title {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-20px);
+  }
+}
+
+.hero-title {
+  font-size: 3rem;
+  font-weight: 800;
   color: white;
-  font-weight: bold;
+  margin-bottom: 16px;
+  text-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  
+  @media (max-width: 600px) {
+    font-size: 2rem;
+  }
 }
 
-.actions {
+.hero-subtitle {
+  font-size: 1.25rem;
+  color: rgba(255, 255, 255, 0.9);
+  margin-bottom: 48px;
+  font-weight: 400;
+}
+
+/* Action Cards */
+.action-card {
+  border-radius: 24px !important;
+  background: white;
+  backdrop-filter: blur(10px);
+  animation: slideUp 0.6s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.admin-card {
+  border: 2px solid #4e73df;
+}
+
+.manager-card {
+  border: 2px solid #1cc88a;
+}
+
+.warning-card {
+  border: 2px solid #f6c23e;
+}
+
+.admin-features {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  
+  @media (max-width: 600px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.feature-item {
   display: flex;
-  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.875rem;
+  color: #5a6c7d;
+  font-weight: 500;
 }
 
-.managed-rooms-card {
-  border-radius: 12px;
+.admin-btn {
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: none;
+  font-size: 1rem;
 }
 
-.room-card {
-  border-radius: 10px;
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 48px 24px;
+  
+  h4 {
+    color: #2c3e50;
+  }
+}
+
+/* Rooms Grid */
+.rooms-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.room-item {
+  border-radius: 16px !important;
+  border: 2px solid transparent;
+  transition: all 0.3s ease;
+  
+  &:hover {
+    border-color: #1cc88a;
+    transform: translateY(-4px);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15) !important;
+  }
+}
+
+.room-info {
+  .info-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.875rem;
+    color: #5a6c7d;
+  }
+}
+
+/* Features Section */
+.features-section {
+  padding: 80px 0;
+  background: white;
+  position: relative;
+  z-index: 1;
+}
+
+.section-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #2c3e50;
+  
+  @media (max-width: 600px) {
+    font-size: 1.75rem;
+  }
+}
+
+.feature-card {
+  text-align: center;
+  padding: 32px 24px;
+  border-radius: 16px;
+  transition: transform 0.3s ease;
+  
+  &:hover {
+    transform: translateY(-8px);
+  }
+  
+  h3 {
+    color: #2c3e50;
+  }
+}
+
+/* Footer */
+.modern-footer {
+  padding: 40px 0;
+  background: rgba(0, 0, 0, 0.1);
+  position: relative;
+  z-index: 1;
+}
+
+/* Logout Dialog */
+.logout-dialog {
+  border-radius: 24px !important;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .hero-section {
+    padding: 40px 0 30px;
+  }
+  
+  .features-section {
+    padding: 40px 0;
+  }
 }
 </style>

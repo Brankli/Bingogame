@@ -9,11 +9,14 @@ import { AuthModule } from '../auth/auth.module';
 import { UserModule } from '../user/user.module';
 import { RoomPrize } from './entities/room-prize.entity';
 import { RoomManager } from './entities/room-manager.entity';
+import { CardModule } from '../card/card.module';
+import { Card } from '../card/entities/card.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Room, RoomPrize, RoomManager]),
+    TypeOrmModule.forFeature([Room, RoomPrize, RoomManager, Card]),
     forwardRef(() => MatchModule),
+    forwardRef(() => CardModule),
     SocketsModule,
     AuthModule,
     UserModule,

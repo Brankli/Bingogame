@@ -7,6 +7,7 @@ import { Match } from './entities/match.entity';
 import { MatchNumber } from './entities/match-number.entity';
 import { RoomModule } from '../room/room.module';
 import { SocketsModule } from '../sockets/sockets.module';
+import { CardModule } from '../card/card.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { SocketsModule } from '../sockets/sockets.module';
     }),
     forwardRef(() => RoomModule),
     SocketsModule,
+    forwardRef(() => CardModule),
   ],
   providers: [MatchService, MatchesConsumer],
   exports: [MatchService],

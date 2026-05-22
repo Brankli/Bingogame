@@ -16,6 +16,7 @@ import { Cache } from 'cache-manager';
 import { EXTRACTED_NUMBERS_CACHE_PREFIX, MATCH_NUMBER_EXTRACTION_DELAY } from './consts/match.const';
 import { MatchNumber } from './entities/match-number.entity';
 import { SocketsGateway } from '../sockets/sockets.gateway';
+import { CardService } from '../card/card.service';
 import {
   BINGO_ONE_STARTED_EVENT,
   EXTRACTED_NUMBERS_EVENT,
@@ -37,6 +38,7 @@ import { CreateMatchDto } from './dto/create-match.dto';
 export class MatchService {
   private readonly logger: Logger = new Logger('MatchService');
   private matchTimers: Map<number, NodeJS.Timeout> = new Map();
+  private matchSpeeds: Map<number, number> = new Map(); // Store speed per match
   private readonly matchNumbersCachePrefix = EXTRACTED_NUMBERS_CACHE_PREFIX;
 
   constructor(
@@ -52,6 +54,9 @@ export class MatchService {
     @Inject(forwardRef(() => RoomService))
     private readonly roomService: RoomService,
 
+    @Inject(forwardRef(() => CardService))
+    private readonly cardService: CardService,
+
     @Inject(CACHE_MANAGER)
     private cacheManager: Cache,
 
@@ -60,14 +65,18 @@ export class MatchService {
     //
   }
 
-  startTimer(match: Match, roomId: number): void {
+  startTimer(match: Match, roomId: number, speed?: number): void {
     // Clear any existing timer for this match
     if (this.matchTimers.has(match.id)) {
       clearInterval(this.matchTimers.get(match.id));
       this.logger.log(`Cleared existing timer for match #${match.id}`);
     }
 
-    this.logger.log(`Starting timer for match #${match.id} in room #${roomId}`);
+    // Use provided speed or get stored speed or use default
+    const callingSpeed = speed || this.matchSpeeds.get(match.id) || MATCH_NUMBER_EXTRACTION_DELAY;
+    this.matchSpeeds.set(match.id, callingSpeed);
+
+    this.logger.log(`Starting timer for match #${match.id} in room #${roomId} with speed ${callingSpeed}ms`);
 
     const timer = setInterval(async () => {
       const extractedNumber = await this.extractNumber(match);
@@ -79,18 +88,41 @@ export class MatchService {
       if (extractedNumber === null && this.matchTimers.has(match.id)) {
         clearInterval(this.matchTimers.get(match.id));
         this.matchTimers.delete(match.id);
+        this.matchSpeeds.delete(match.id);
         this.logger.log(`Timer completed for match #${match.id}`);
       }
-    }, MATCH_NUMBER_EXTRACTION_DELAY);
+    }, callingSpeed);
 
     this.matchTimers.set(match.id, timer);
   }
 
   stopTimer(matchId: number): void {
+    this.logger.log(`[STOP TIMER] Attempting to stop timer for match #${matchId}`);
+    this.logger.log(`[STOP TIMER] Timer exists: ${this.matchTimers.has(matchId)}`);
+    
     if (this.matchTimers.has(matchId)) {
-      clearInterval(this.matchTimers.get(matchId));
+      const timer = this.matchTimers.get(matchId);
+      clearInterval(timer);
       this.matchTimers.delete(matchId);
-      this.logger.log(`Timer stopped for match #${matchId}`);
+      this.logger.log(`[STOP TIMER] ✅ Timer stopped and deleted for match #${matchId}`);
+    } else {
+      this.logger.warn(`[STOP TIMER] ⚠️ No timer found for match #${matchId}`);
+    }
+    
+    this.logger.log(`[STOP TIMER] Active timers count: ${this.matchTimers.size}`);
+  }
+
+  /**
+   * Change the calling speed for an active match
+   */
+  changeSpeed(matchId: number, roomId: number, newSpeed: number): void {
+    this.logger.log(`Changing speed for match #${matchId} to ${newSpeed}ms`);
+    this.matchSpeeds.set(matchId, newSpeed);
+    
+    // Restart timer with new speed if match is active
+    if (this.matchTimers.has(matchId)) {
+      const match = { id: matchId } as Match;
+      this.startTimer(match, roomId, newSpeed);
     }
   }
 
@@ -99,6 +131,22 @@ export class MatchService {
     roomId: number,
     options?: { delay?: number },
   ): Promise<void> {
+    const isElectron = process.env.ELECTRON_MODE === 'true' || process.versions.hasOwnProperty('electron');
+    
+    // Always use direct timer approach for reliability
+    // (Bull queue can have issues with Redis connection)
+    if (options?.delay) {
+      setTimeout(() => {
+        this.startTimer(match, roomId);
+      }, options.delay);
+    } else {
+      this.startTimer(match, roomId);
+    }
+    return;
+    
+    // Original queue-based code (disabled for now)
+    /*
+    // Server mode: use Bull queue
     if (options?.delay) {
       const delayPromise = new Promise<void>((resolve, reject) => {
         setTimeout(async () => {
@@ -117,6 +165,7 @@ export class MatchService {
     }
 
     await this.matchesQueue.add({ match, roomId });
+    */
   }
 
   async extractNumber(match: Match): Promise<number | null> {
@@ -167,8 +216,11 @@ export class MatchService {
     const match = await this.matchRepository.save({
       room,
       soldCards: createMatchDto.soldCards,
+      registeredCards: createMatchDto.registeredCards || [],
     });
     await this.clearMatchNumbersCache(match.id);
+
+    this.logger.log(`Match created with ${createMatchDto.registeredCards?.length || 0} registered cards`);
 
     const roomPrize = room.roomPrize;
     roomPrize.oneBalls =
@@ -234,6 +286,12 @@ export class MatchService {
     // Stop the timer
     this.stopTimer(matchId);
 
+    // Delete all called numbers for this match
+    await this.matchNumberRepository.delete({ match: { id: matchId } });
+
+    // Unlock all cards that were locked for this match
+    await this.cardService.unlockCardsForMatch(matchId);
+
     // Close the match
     await this.matchRepository.update({ id: matchId }, { closed: true });
     await this.clearMatchNumbersCache(matchId);
@@ -243,7 +301,7 @@ export class MatchService {
       .to(roomId.toString())
       .emit(MATCH_RESET_EVENT, { matchId });
       
-    this.logger.log(`Match #${matchId} reset and timer stopped`);
+    this.logger.log(`Match #${matchId} reset - numbers cleared, cards unlocked, timer stopped`);
   }
 
   async start(match: Match | number, room?: number): Promise<void> {

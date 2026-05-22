@@ -50,4 +50,12 @@ export default class RoomService extends Api {
     public cleanupInvalidManagers(): AxiosPromise<{ success: boolean; message: string; count: number }> {
         return this.httpClient.post('/rooms/cleanup-invalid-managers');
     }
+
+    public generateCardsForRoom(roomId: number): AxiosPromise<{ success: boolean; message: string; generated: number }> {
+        return this.httpClient.post(`/rooms/${roomId}/generate-cards`);
+    }
+
+    public copyCardsFromRoom(targetRoomId: number, sourceRoomId: number): AxiosPromise<{ success: boolean; message: string; copied: number }> {
+        return this.httpClient.post(`/rooms/${targetRoomId}/copy-cards`, { sourceRoomId });
+    }
 }

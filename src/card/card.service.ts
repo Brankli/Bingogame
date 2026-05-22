@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Card } from './entities/card.entity';
@@ -7,6 +7,8 @@ import { VerifyCardDto } from './dto/verify-card.dto';
 
 @Injectable()
 export class CardService {
+  private readonly logger = new Logger(CardService.name);
+
   constructor(
     @InjectRepository(Card)
     private readonly cardRepository: Repository<Card>,
@@ -67,10 +69,16 @@ export class CardService {
 
   /**
    * Generate unique card number with specific format
+   * @param index - Card index (1-400)
+   * @param roomId - Optional room ID for room-specific format
    */
-  generateCardNumber(index?: number): string {
+  generateCardNumber(index?: number, roomId?: number): string {
+    if (index !== undefined && roomId !== undefined) {
+      // Format: ROOM{id}-CAR{number} (e.g., ROOM9-CAR0001)
+      return `ROOM${roomId}-CAR${String(index).padStart(4, '0')}`;
+    }
     if (index !== undefined) {
-      // Format: CARD-001, CARD-002, etc.
+      // Format: CARD-001, CARD-002, etc. (legacy format)
       return `CARD-${String(index).padStart(3, '0')}`;
     }
     const timestamp = Date.now().toString(36);
@@ -80,12 +88,15 @@ export class CardService {
 
   /**
    * Generate 400 pre-registered cards with static grids
+   * @param roomId - Room ID for generating room-specific cards
    */
-  async generateBulkCards(): Promise<Card[]> {
+  async generateBulkCards(roomId?: number): Promise<Card[]> {
     const cards: Card[] = [];
     
     for (let i = 1; i <= 400; i++) {
-      const cardNumber = this.generateCardNumber(i);
+      const cardNumber = roomId 
+        ? this.generateCardNumber(i, roomId)
+        : this.generateCardNumber(i);
       
       const existingCard = await this.cardRepository.findOne({
         where: { cardNumber },
@@ -104,6 +115,7 @@ export class CardService {
       }
     }
 
+    this.logger.log(`Generated ${cards.length} new cards${roomId ? ` for room ${roomId}` : ''}`);
     return cards;
   }
 
@@ -156,12 +168,12 @@ export class CardService {
     if (typeof identifier === 'number') {
       card = await this.cardRepository.findOne({
         where: { id: identifier },
-        relations: ['assignedUser', 'room'],
+        relations: ['assignedUser', 'room', 'room.currentMatch'],
       });
     } else {
       card = await this.cardRepository.findOne({
         where: { cardNumber: identifier },
-        relations: ['assignedUser', 'room'],
+        relations: ['assignedUser', 'room', 'room.currentMatch'],
       });
     }
     
@@ -258,27 +270,41 @@ export class CardService {
    * Lock card after wrong BINGO claim
    */
   async lockCard(cardNumber: string, matchId: number): Promise<Card> {
-    const card = await this.findOne(cardNumber);
-    if (!card) {
-      throw new Error('Card not found');
+    try {
+      const card = await this.findOne(cardNumber);
+      if (!card) {
+        throw new NotFoundException(`Card ${cardNumber} not found`);
+      }
+
+      await this.cardRepository.update(card.id, {
+        isLocked: true,
+        lockedInMatch: { id: matchId } as any,
+      });
+
+      return this.findOne(cardNumber);
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      this.logger.error(`Error locking card ${cardNumber}:`, error);
+      throw new BadRequestException(`Failed to lock card: ${error.message}`);
     }
-
-    await this.cardRepository.update(card.id, {
-      isLocked: true,
-      lockedInMatch: { id: matchId } as any,
-    });
-
-    return this.findOne(cardNumber);
   }
 
   /**
    * Unlock all cards for a match (when match ends)
    */
   async unlockCardsForMatch(matchId: number): Promise<void> {
-    await this.cardRepository.update(
-      { lockedInMatch: { id: matchId } as any },
-      { isLocked: false, lockedInMatch: null },
-    );
+    try {
+      await this.cardRepository.update(
+        { lockedInMatch: { id: matchId } as any },
+        { isLocked: false, lockedInMatch: null },
+      );
+      this.logger.log(`Unlocked all cards for match ${matchId}`);
+    } catch (error) {
+      this.logger.error(`Error unlocking cards for match ${matchId}:`, error);
+      throw new BadRequestException(`Failed to unlock cards: ${error.message}`);
+    }
   }
 
   /**
@@ -379,25 +405,59 @@ export class CardService {
 
   /**
    * Verify if a card wins with given pattern
+   * NOW INCLUDES: Verification that the winning pattern was completed on the LAST called number
+   * AND: Verification that the card is registered for the current match
    */
   async verify(verifyDto: VerifyCardDto): Promise<{
     isValid: boolean;
     winningPattern?: number[][];
+    winningPatterns?: number[][][]; // NEW: Array of all matching patterns
+    patternNames?: string[]; // NEW: Names of all matching patterns
     markedCells?: boolean[][];
     message: string;
     cardLocked?: boolean;
     specialWin?: boolean;
+    lastCalledNumber?: number; // NEW: The number that completed the win
+    unregistered?: boolean; // NEW: Flag for unregistered cards
   }> {
     const card = await this.findOne(verifyDto.cardNumber);
 
     if (!card) {
+      this.logger.warn(`Verification failed: Card ${verifyDto.cardNumber} not found`);
       return {
         isValid: false,
         message: 'Card not found',
       };
     }
 
+    // Check if card is registered for the current match
+    try {
+      const room = card.room;
+      if (room?.currentMatch) {
+        const registeredCards = room.currentMatch.registeredCards || [];
+        const isRegistered = registeredCards.includes(verifyDto.cardNumber);
+        
+        if (!isRegistered) {
+          this.logger.warn(`Verification BLOCKED: Card ${verifyDto.cardNumber} is NOT registered for this match`);
+          this.logger.warn(`Registered cards: ${registeredCards.join(', ')}`);
+          return {
+            isValid: false,
+            message: `Card ${verifyDto.cardNumber} was not registered for this game. Only registered cards can win.`,
+            unregistered: true,
+          };
+        }
+        
+        this.logger.log(`✅ Card ${verifyDto.cardNumber} is registered for this match`);
+      } else {
+        this.logger.warn(`⚠️ No current match found for room, skipping registration check`);
+      }
+    } catch (error) {
+      this.logger.error(`Error checking card registration:`, error);
+      // Continue with verification if registration check fails
+    }
+
     if (card.isLocked) {
+      this.logger.warn(`Verification failed: Card ${verifyDto.cardNumber} is locked`);
       return {
         isValid: false,
         message: 'Card is locked due to previous wrong claim',
@@ -413,10 +473,20 @@ export class CardService {
       : [];
     const pattern = String(verifyDto.pattern || '').toLowerCase();
 
+    this.logger.log(`Verifying card ${verifyDto.cardNumber} with pattern: ${pattern}`);
+    this.logger.log(`Called numbers (${calledNumbers.length}): ${calledNumbers.join(', ')}`);
+    this.logger.log(`Card grid: ${JSON.stringify(grid)}`);
+
+    // Get the last called number
+    const lastCalledNumber = calledNumbers.length > 0 ? calledNumbers[calledNumbers.length - 1] : null;
+    this.logger.log(`Last called number: ${lastCalledNumber}`);
+
     // Create marked cells matrix
     const markedCells: boolean[][] = grid.map((row) =>
       row.map((num) => num === 0 || calledNumbers.includes(num)),
     );
+
+    this.logger.log(`Marked cells: ${JSON.stringify(markedCells)}`);
 
     // Special Rule: If 12 or more numbers have been called and card has ZERO marked numbers (excluding FREE space)
     // then the card automatically wins regardless of pattern
@@ -437,12 +507,16 @@ export class CardService {
 
       // If zero numbers are marked (unlucky card), it wins!
       if (markedCount === 0) {
+        this.logger.log(`Special win! Card ${verifyDto.cardNumber} has zero marked numbers`);
         return {
           isValid: true,
           winningPattern: [[2, 2]], // Just highlight the FREE space
+          winningPatterns: [[[2, 2]]],
+          patternNames: ['Special Win'],
           markedCells,
           message: 'Special win! No numbers marked after 12 calls - Unlucky Winner!',
           specialWin: true,
+          lastCalledNumber: lastCalledNumber || 0,
         };
       }
     }
@@ -450,6 +524,7 @@ export class CardService {
     // Get pattern coordinates
     const patternOptions = this.getPatternCoordinates(pattern);
     if (!patternOptions.length) {
+      this.logger.warn(`Unsupported pattern: ${pattern}`);
       return {
         isValid: false,
         markedCells,
@@ -457,8 +532,16 @@ export class CardService {
       };
     }
 
+    this.logger.log(`Pattern options for ${pattern}: ${JSON.stringify(patternOptions)}`);
+
+    // NEW: Collect ALL matching patterns and check if they were completed on the last called number
+    const allMatchingPatterns: number[][][] = [];
+    const allPatternNames: string[] = [];
+    let winCompletedOnLastNumber = false;
+
     // Check if any pattern option matches
-    for (const patternCoords of patternOptions) {
+    for (let i = 0; i < patternOptions.length; i++) {
+      const patternCoords = patternOptions[i];
       const allMarked = patternCoords.every(([row, col]) => {
         if (
           !Number.isInteger(row) ||
@@ -470,24 +553,94 @@ export class CardService {
         ) {
           return false;
         }
-        return Boolean(markedCells[row]?.[col]);
+        const isMarked = Boolean(markedCells[row]?.[col]);
+        this.logger.debug(`Checking cell [${row},${col}] (value: ${grid[row][col]}): ${isMarked ? 'MARKED' : 'NOT MARKED'}`);
+        return isMarked;
       });
 
       if (allMarked) {
-        return {
-          isValid: true,
-          winningPattern: patternCoords,
-          markedCells,
-          message: `Valid ${pattern} win!`,
-        };
+        // Check if this pattern was completed by the last called number
+        const patternContainsLastNumber = patternCoords.some(([row, col]) => {
+          const cellValue = grid[row][col];
+          return cellValue === lastCalledNumber;
+        });
+
+        if (patternContainsLastNumber) {
+          winCompletedOnLastNumber = true;
+        }
+
+        allMatchingPatterns.push(patternCoords);
+        // Generate pattern name based on type
+        const patternName = this.getPatternName(pattern, i, patternOptions.length);
+        allPatternNames.push(patternName);
+        this.logger.log(`✅ Found matching pattern: ${patternName} (completed on last number: ${patternContainsLastNumber})`);
       }
     }
 
+    // If we found at least one matching pattern
+    if (allMatchingPatterns.length > 0) {
+      // NEW: Check if the win was completed on the last called number
+      if (!winCompletedOnLastNumber && lastCalledNumber !== null) {
+        this.logger.warn(`❌ Card ${verifyDto.cardNumber} has winning pattern(s) but they were NOT completed on the last called number (${lastCalledNumber})`);
+        return {
+          isValid: false,
+          winningPattern: allMatchingPatterns[0], // Include pattern for display
+          winningPatterns: allMatchingPatterns, // Include all patterns for display
+          patternNames: allPatternNames, // Include pattern names for display
+          markedCells,
+          message: `Pattern was completed earlier, not on the current number (${lastCalledNumber}). You must call BINGO immediately when you win!`,
+          lateClaim: true, // Flag to indicate this is a late claim
+        };
+      }
+
+      this.logger.log(`✅ Valid ${pattern} win for card ${verifyDto.cardNumber}! Found ${allMatchingPatterns.length} matching pattern(s) completed on number ${lastCalledNumber}`);
+      return {
+        isValid: true,
+        winningPattern: allMatchingPatterns[0], // Keep first pattern for backward compatibility
+        winningPatterns: allMatchingPatterns, // NEW: All matching patterns
+        patternNames: allPatternNames, // NEW: Names of all patterns
+        markedCells,
+        message: `Valid ${pattern} win! (${allMatchingPatterns.length} pattern${allMatchingPatterns.length > 1 ? 's' : ''} matched on number ${lastCalledNumber})`,
+        lastCalledNumber: lastCalledNumber || 0,
+      };
+    }
+
+    this.logger.warn(`❌ No valid ${pattern} pattern found for card ${verifyDto.cardNumber}`);
     return {
       isValid: false,
       markedCells,
       message: `No valid ${pattern} pattern found`,
     };
+  }
+
+  /**
+   * Get human-readable pattern name
+   */
+  private getPatternName(pattern: string, index: number, total: number): string {
+    switch (pattern) {
+      case 'horizontal':
+        return `Horizontal Row ${index + 1}`;
+      case 'vertical':
+        return `Vertical Column ${index + 1}`;
+      case 'diagonal':
+        return index === 0 ? 'Diagonal (\\)' : 'Diagonal (/)';
+      case 'anyline':
+        if (index < 5) return `Horizontal Row ${index + 1}`;
+        if (index < 10) return `Vertical Column ${index - 4}`;
+        return index === 10 ? 'Diagonal (\\)' : 'Diagonal (/)';
+      case 'corners':
+        return 'Four Corners';
+      case 'x':
+        return 'X Pattern';
+      case 't':
+        return 'T Pattern';
+      case 'l':
+        return 'L Pattern';
+      case 'fullhouse':
+        return 'Full House';
+      default:
+        return `Pattern ${index + 1}`;
+    }
   }
 
   /**

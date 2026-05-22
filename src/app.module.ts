@@ -22,39 +22,85 @@ import { CardModule } from './card/card.module';
 import { Card } from './card/entities/card.entity';
 import { RoomManager } from './room/entities/room-manager.entity';
 
+const isElectron = process.env.ELECTRON_MODE === 'true' || process.versions.hasOwnProperty('electron');
+
+// Determine the correct path for serving static files
+const getStaticFilesPath = () => {
+  if (isElectron) {
+    // In Electron, client files are in app.asar.unpacked/client/dist
+    const path = require('path');
+    const resourcesPath = (process as any).resourcesPath || path.join(__dirname, '..', '..');
+    return path.join(resourcesPath, 'app.asar.unpacked', 'client', 'dist');
+  }
+  // In server mode, use relative path
+  return join(__dirname, '..', 'client/dist');
+};
+
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ServeStaticModule.forRoot({
-      rootPath: join(__dirname, '..', 'client/dist'),
+      rootPath: getStaticFilesPath(),
     }),
+    // Use SQLite for Electron, MySQL for server
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        type: 'mysql',
-        host: configService.get<string>('DB_HOST'),
-        port: configService.get<number>('DB_PORT'),
-        username: configService.get<string>('DB_USER'),
-        password: configService.get<string>('DB_PASS'),
-        database: configService.get<string>('DB_NAME'),
-        entities: [Room, RoomPrize, RoomManager, User, Match, MatchNumber, Card],
-        synchronize: true,
-      }),
+      useFactory: (configService: ConfigService) => {
+        if (isElectron) {
+          // Use user's home directory for database in Electron
+          const os = require('os');
+          const dbPath = require('path').join(os.homedir(), '.bingo', 'bingo.db');
+          
+          // Ensure directory exists
+          const fs = require('fs');
+          const dbDir = require('path').dirname(dbPath);
+          if (!fs.existsSync(dbDir)) {
+            fs.mkdirSync(dbDir, { recursive: true });
+          }
+          
+          return {
+            type: 'better-sqlite3',
+            database: dbPath,
+            entities: [Room, RoomPrize, RoomManager, User, Match, MatchNumber, Card],
+            synchronize: true,
+          };
+        }
+        return {
+          type: 'mysql',
+          host: configService.get<string>('DB_HOST'),
+          port: configService.get<number>('DB_PORT'),
+          username: configService.get<string>('DB_USER'),
+          password: configService.get<string>('DB_PASS'),
+          database: configService.get<string>('DB_NAME'),
+          entities: [Room, RoomPrize, RoomManager, User, Match, MatchNumber, Card],
+          synchronize: true,
+        };
+      },
       inject: [ConfigService],
     }),
-    BullModule.forRoot({
-      redis: {
+    // Only use Bull/Redis in server mode
+    ...(isElectron ? [] : [
+      BullModule.forRoot({
+        redis: {
+          host: 'localhost',
+          port: 6379,
+        },
+      }),
+      CacheModule.register<ClientOpts>({
+        isGlobal: true,
+        store: redisStore,
         host: 'localhost',
         port: 6379,
-      },
-    }),
-    CacheModule.register<ClientOpts>({
-      isGlobal: true,
-
-      store: redisStore,
-      host: 'localhost',
-      port: 6379,
-    }),
+      }),
+    ]),
+    // Use in-memory cache for Electron
+    ...(isElectron ? [
+      CacheModule.register({
+        isGlobal: true,
+        ttl: 300,
+        max: 100,
+      }),
+    ] : []),
     RoomModule,
     AuthModule,
     UserModule,

@@ -1,4 +1,5 @@
 import {
+  BeforeInsert,
   Column,
   Entity,
   ManyToOne,
@@ -28,8 +29,15 @@ export class Card {
   @ManyToOne(() => Match, { nullable: true, onDelete: 'SET NULL' })
   lockedInMatch?: Match;
 
-  @Column({ type: 'datetime', default: () => 'NOW' })
+  @Column({ type: 'datetime', nullable: true })
   createdAt!: Date;
+
+  @BeforeInsert()
+  setCreatedAt() {
+    if (!this.createdAt) {
+      this.createdAt = new Date();
+    }
+  }
 
   @Column({ default: true })
   isActive!: boolean;

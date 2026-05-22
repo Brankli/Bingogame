@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test All Audio Files</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        .controls {
+            margin: 20px 0;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            margin: 5px;
+            cursor: pointer;
+        }
+        .start-btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+        }
+        .stop-btn {
+            background: #f44336;
+            color: white;
+            border: none;
+        }
+        #results {
+            margin-top: 20px;
+        }
+        .result-item {
+            padding: 5px;
+            margin: 2px 0;
+            border-radius: 3px;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .testing {
+            background: #fff3cd;
+            color: #856404;
+        }
+        #progress {
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .stats {
+            margin: 20px 0;
+            padding: 15px;
+            background: #e7f3ff;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔊 Test All Amharic Audio Files</h1>
+    
+    <div class="controls">
+        <button class="start-btn" onclick="testAllNumbers()">Test All Numbers (B-1 to O-75)</button>
+        <button class="start-btn" onclick="testEvents()">Test All Events</button>
+        <button class="stop-btn" onclick="stopTest()">Stop Test</button>
+        <button onclick="clearResults()">Clear Results</button>
+    </div>
+    
+    <div id="progress"></div>
+    
+    <div class="stats" id="stats" style="display: none;">
+        <h3>Test Results:</h3>
+        <p>✅ Success: <span id="successCount">0</span></p>
+        <p>❌ Failed: <span id="failCount">0</span></p>
+        <p>📊 Total: <span id="totalCount">0</span></p>
+    </div>
+    
+    <div id="results"></div>
+
+    <script>
+        let stopTesting = false;
+        let successCount = 0;
+        let failCount = 0;
+        let totalCount = 0;
+
+        function updateStats() {
+            document.getElementById('successCount').textContent = successCount;
+            document.getElementById('failCount').textContent = failCount;
+            document.getElementById('totalCount').textContent = totalCount;
+            document.getElementById('stats').style.display = 'block';
+        }
+
+        function addResult(message, type) {
+            const resultsDiv = document.getElementById('results');
+            const item = document.createElement('div');
+            item.className = `result-item ${type}`;
+            item.textContent = message;
+            resultsDiv.insertBefore(item, resultsDiv.firstChild);
+        }
+
+        function updateProgress(current, total, item) {
+            document.getElementById('progress').textContent = 
+                `Testing ${item}... (${current}/${total})`;
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+            successCount = 0;
+            failCount = 0;
+            totalCount = 0;
+            updateStats();
+            document.getElementById('progress').textContent = '';
+        }
+
+        function stopTest() {
+            stopTesting = true;
+            document.getElementById('progress').textContent = 'Test stopped by user';
+        }
+
+        async function testAudioFile(path, name) {
+            if (stopTesting) return false;
+            
+            return new Promise((resolve) => {
+                const audio = new Audio(path);
+                let resolved = false;
+                
+                const timeout = setTimeout(() => {
+                    if (!resolved) {
+                        resolved = true;
+                        addResult(`❌ ${name} - Timeout (file took too long to load)`, 'error');
+                        failCount++;
+                        resolve(false);
+                    }
+                }, 5000);
+                
+                audio.addEventListener('loadeddata', () => {
+                    if (!resolved) {
+                        clearTimeout(timeout);
+                        resolved = true;
+                        addResult(`✅ ${name} - Loaded successfully`, 'success');
+                        successCount++;
+                        resolve(true);
+                    }
+                });
+                
+                audio.addEventListener('error', (e) => {
+                    if (!resolved) {
+                        clearTimeout(timeout);
+                        resolved = true;
+                        const errorMsg = audio.error ? 
+                            `Code ${audio.error.code}: ${audio.error.message || 'Unknown error'}` : 
+                            'Unknown error';
+                        addResult(`❌ ${name} - ${errorMsg}`, 'error');
+                        failCount++;
+                        resolve(false);
+                    }
+                });
+                
+                audio.load();
+            });
+        }
+
+        async function testAllNumbers() {
+            stopTesting = false;
+            clearResults();
+            
+            const ranges = {
+                'B': { start: 1, end: 15 },
+                'I': { start: 16, end: 30 },
+                'N': { start: 31, end: 45 },
+                'G': { start: 46, end: 65 },
+                'O': { start: 66, end: 75 }
+            };
+            
+            let current = 0;
+            const total = 75;
+            
+            for (const [letter, range] of Object.entries(ranges)) {
+                if (stopTesting) break;
+                
+                for (let num = range.start; num <= range.end; num++) {
+                    if (stopTesting) break;
+                    
+                    current++;
+                    totalCount++;
+                    const name = `${letter}-${num}`;
+                    const path = `/audio/amharic/numbers/${letter.toLowerCase()}-${num}.mp3`;
+                    
+                    updateProgress(current, total, name);
+                    addResult(`⏳ Testing ${name}...`, 'testing');
+                    
+                    await testAudioFile(path, name);
+                    updateStats();
+                    
+                    // Small delay between tests
+                    await new Promise(r => setTimeout(r, 100));
+                }
+            }
+            
+            if (!stopTesting) {
+                document.getElementById('progress').textContent = 
+                    `✅ Test complete! ${successCount}/${total} files working`;
+            }
+        }
+
+        async function testEvents() {
+            stopTesting = false;
+            clearResults();
+            
+            const events = [
+                'card-locked',
+                'card-registered',
+                'congratulations',
+                'game-paused',
+                'game-reset',
+                'game-resumed',
+                'game-start',
+                'new-game',
+                'please-wait',
+                'try-again',
+                'winner-invalid',
+                'winner-valid'
+            ];
+            
+            const total = events.length;
+            
+            for (let i = 0; i < events.length; i++) {
+                if (stopTesting) break;
+                
+                const event = events[i];
+                totalCount++;
+                const path = `/audio/amharic/events/${event}.mp3`;
+                
+                updateProgress(i + 1, total, event);
+                addResult(`⏳ Testing ${event}...`, 'testing');
+                
+                await testAudioFile(path, event);
+                updateStats();
+                
+                await new Promise(r => setTimeout(r, 200));
+            }
+            
+            if (!stopTesting) {
+                document.getElementById('progress').textContent = 
+                    `✅ Test complete! ${successCount}/${total} events working`;
+            }
+        }
+
+        // Auto-test on load (optional)
+        // window.addEventListener('load', () => {
+        //     setTimeout(testAllNumbers, 1000);
+        // });
+    </script>
+</body>
+</html>

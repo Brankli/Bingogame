@@ -27,8 +27,8 @@ export class CardController {
 
   @UseGuards(JwtAuthGuard)
   @Post('bulk-generate')
-  async generateBulk() {
-    return this.cardService.generateBulkCards();
+  async generateBulk(@Body() body: { roomId?: number }) {
+    return this.cardService.generateBulkCards(body.roomId);
   }
 
   @Get()

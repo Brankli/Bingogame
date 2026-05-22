@@ -13,7 +13,7 @@ import { MatchModule } from '../match/match.module';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('SECRET_KEY'),
+        secret: configService.get<string>('SECRET_KEY') || 'electron-default-secret-key-change-in-production',
         signOptions: { expiresIn: '1d' },
       }),
       inject: [ConfigService],

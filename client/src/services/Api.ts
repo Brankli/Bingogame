@@ -1,22 +1,41 @@
 import axios, {AxiosInstance} from "axios";
-import cookie from 'cookie';
+import { getApiUrl } from '@/utils/apiUrl';
 
 export default class Api {
     protected httpClient: AxiosInstance;
 
     constructor() {
-        const cookies = cookie.parse(document.cookie);
-        const token: string | undefined = cookies.token?.length
-            ? `Bearer ${cookies.token}`
-            : undefined;
+        const apiUrl = getApiUrl();
 
         this.httpClient = axios.create({
-            baseURL: `${process.env.VUE_APP_API_URL || 'http://localhost:3000'}/api`,
+            baseURL: `${apiUrl}/api`,
             headers: {
                 'Content-Type': 'application/json',
                 Accept: 'application/json',
-                Authorization: token
             }
         });
+
+        // Add request interceptor to include token on every request
+        this.httpClient.interceptors.request.use(
+            (config) => {
+                // Read token from localStorage (works in Electron)
+                const token = localStorage.getItem('token');
+                
+                if (token) {
+                    config.headers.Authorization = `Bearer ${token}`;
+                    console.log('🔑 Token added to request');
+                } else {
+                    console.warn('⚠️ No token found in localStorage');
+                }
+                
+                // Always return config - don't reject if no token
+                // (login/register routes don't need token)
+                return config;
+            },
+            (error) => {
+                return Promise.reject(error);
+            }
+        );
     }
 }
+

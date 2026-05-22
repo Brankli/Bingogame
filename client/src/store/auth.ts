@@ -15,12 +15,7 @@ export const useAuth = defineStore('auth', () => {
         user.value = null;
         // Clear token from localStorage
         localStorage.removeItem('token');
-        // Clear any cookies
-        document.cookie.split(";").forEach((c) => {
-            document.cookie = c
-                .replace(/^ +/, "")
-                .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
-        });
+        console.log('✅ Token cleared from localStorage');
     }
 
     return { user, logged, setUser, logout };

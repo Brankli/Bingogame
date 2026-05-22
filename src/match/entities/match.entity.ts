@@ -19,6 +19,9 @@ export class Match {
   @Column({ default: 1 })
   soldCards!: number;
 
+  @Column('simple-array', { nullable: true })
+  registeredCards?: string[];
+
   @ManyToOne(() => Room, (room) => room.matches, { onDelete: 'CASCADE' })
   room!: Room;
 

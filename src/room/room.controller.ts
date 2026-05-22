@@ -158,4 +158,34 @@ export class RoomController {
       count 
     };
   }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Post(':id/generate-cards')
+  async generateCardsForRoom(@Param('id') id: number) {
+    const result = await this.roomService.generateCardsForExistingRoom(id);
+    return {
+      success: true,
+      message: `Generated ${result.generated} cards for room`,
+      generated: result.generated,
+    };
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Post(':id/copy-cards')
+  async copyCardsFromRoom(
+    @Param('id') targetRoomId: number,
+    @Body() body: { sourceRoomId: number },
+  ) {
+    const result = await this.roomService.copyCardsFromRoom(
+      body.sourceRoomId,
+      targetRoomId,
+    );
+    return {
+      success: true,
+      message: `Copied ${result.copied} cards to room`,
+      copied: result.copied,
+    };
+  }
 }

@@ -44,7 +44,11 @@ export class AmharicAudioService {
       return this.audioCache.get(path)!;
     }
 
-    const fullPath = `/audio/amharic/${path}.mp3`;
+    // In Electron, audio files are served from the backend
+    const isElectron = navigator.userAgent.toLowerCase().includes('electron');
+    const baseUrl = isElectron ? 'http://localhost:3000' : '';
+    const fullPath = `${baseUrl}/audio/amharic/${path}.mp3`;
+    
     console.log(`[AmharicAudio] Creating new Audio element for: ${fullPath}`);
     
     const audio = new Audio(fullPath);
@@ -101,7 +105,7 @@ export class AmharicAudioService {
         await new Promise((resolve, reject) => {
           audio.addEventListener('canplay', resolve, { once: true });
           audio.addEventListener('error', reject, { once: true });
-          setTimeout(() => reject(new Error('Audio load timeout')), 5000);
+          setTimeout(() => reject(new Error('Audio load timeout')), 10000); // Increased to 10 seconds
         });
       }
       
@@ -141,7 +145,7 @@ export class AmharicAudioService {
         await new Promise((resolve, reject) => {
           audio.addEventListener('canplay', resolve, { once: true });
           audio.addEventListener('error', reject, { once: true });
-          setTimeout(() => reject(new Error('Audio load timeout')), 5000);
+          setTimeout(() => reject(new Error('Audio load timeout')), 10000); // Increased to 10 seconds
         });
       }
       
@@ -172,6 +176,46 @@ export class AmharicAudioService {
       await audio.play();
     } catch (error) {
       console.warn(`Error playing Amharic pattern audio: ${patternName}`, error);
+    }
+  }
+
+  /**
+   * Play a toast message audio
+   * @param toastName - The toast audio name (e.g., 'winner-late', 'card-registered')
+   */
+  async playToast(toastName: string): Promise<void> {
+    if (!this.enabled) {
+      console.log(`[AmharicAudio] Audio disabled, skipping toast: ${toastName}`);
+      return;
+    }
+
+    try {
+      // Stop any currently playing audio
+      this.stopCurrent();
+
+      const path = `toasts/${toastName}`;
+      console.log(`[AmharicAudio] Loading toast audio file: /audio/amharic/${path}.mp3`);
+      
+      const audio = this.loadAudio(path);
+      
+      this.currentAudio = audio;
+      
+      // Wait for audio to be ready
+      if (audio.readyState < 2) {
+        console.log(`[AmharicAudio] Waiting for toast audio to load: ${path}`);
+        await new Promise((resolve, reject) => {
+          audio.addEventListener('canplay', resolve, { once: true });
+          audio.addEventListener('error', reject, { once: true });
+          setTimeout(() => reject(new Error('Audio load timeout')), 10000);
+        });
+      }
+      
+      console.log(`[AmharicAudio] Playing toast audio: ${path}`);
+      await audio.play();
+      console.log(`[AmharicAudio] ✅ Successfully playing toast: ${path}`);
+    } catch (error) {
+      console.error(`[AmharicAudio] ❌ Error playing Amharic toast audio: ${toastName}`, error);
+      throw error;
     }
   }
 

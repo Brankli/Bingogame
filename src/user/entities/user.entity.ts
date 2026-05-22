@@ -1,4 +1,4 @@
-import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import { BeforeInsert, Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
 import { Room } from '../../room/entities/room.entity';
 
 export enum UserRole {
@@ -18,8 +18,7 @@ export class User {
   password!: string;
 
   @Column({
-    type: 'enum',
-    enum: UserRole,
+    type: 'varchar',
     default: UserRole.USER,
   })
   role!: UserRole;
@@ -30,11 +29,22 @@ export class User {
   @Column({ type: 'float', default: 0 })
   totalEarnings!: number;
 
-  @Column({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
+  @Column({ type: 'datetime', nullable: true })
   createdAt!: Date;
 
-  @Column({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP', onUpdate: 'CURRENT_TIMESTAMP' })
+  @Column({ type: 'datetime', nullable: true })
   lastActive!: Date;
+
+  @BeforeInsert()
+  setDates() {
+    const now = new Date();
+    if (!this.createdAt) {
+      this.createdAt = now;
+    }
+    if (!this.lastActive) {
+      this.lastActive = now;
+    }
+  }
 
   @OneToMany(() => Room, (room) => room.owner)
   rooms?: Room[];

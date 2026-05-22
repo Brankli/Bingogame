@@ -152,6 +152,40 @@
             Game Controls
           </v-card-title>
           <v-card-text>
+            <!-- Calling Speed Control -->
+            <v-card variant="tonal" color="info" class="mb-3" v-if="gameStatus !== 'idle'">
+              <v-card-text class="pa-3">
+                <div class="d-flex align-center justify-space-between mb-2">
+                  <span class="text-subtitle-2 font-weight-bold">
+                    <v-icon size="small" class="mr-1">mdi-speedometer</v-icon>
+                    Calling Speed
+                  </span>
+                  <v-chip size="small" color="primary">
+                    {{ callingSpeedLabel }}
+                  </v-chip>
+                </div>
+                <v-slider
+                  v-model="callingSpeed"
+                  :min="1000"
+                  :max="5000"
+                  :step="500"
+                  thumb-label="always"
+                  color="primary"
+                  @update:model-value="changeCallingSpeed"
+                  :disabled="gameStatus !== 'playing'"
+                >
+                  <template v-slot:thumb-label="{ modelValue }">
+                    {{ (modelValue / 1000).toFixed(1) }}s
+                  </template>
+                </v-slider>
+                <div class="d-flex justify-space-between text-caption text-grey">
+                  <span>Fast (1s)</span>
+                  <span>Normal (3s)</span>
+                  <span>Slow (5s)</span>
+                </div>
+              </v-card-text>
+            </v-card>
+
             <v-btn
               color="success"
               block
@@ -178,44 +212,26 @@
               color="primary"
               block
               @click="resumeGame"
-              v-if="gameStatus === 'paused'"
+              v-if="gameStatus === 'paused' && matchWinners.length === 0"
               class="mb-2"
             >
               <v-icon>mdi-play</v-icon>
               Resume
             </v-btn>
 
+            <v-btn
+              color="success"
+              block
+              @click="finishGame"
+              v-if="gameStatus === 'paused' && matchWinners.length > 0"
+              class="mb-2"
+              size="large"
+            >
+              <v-icon>mdi-flag-checkered</v-icon>
+              Finish Game ({{ matchWinners.length }} Winner{{ matchWinners.length > 1 ? 's' : '' }})
+            </v-btn>
+
             <v-divider class="my-4"></v-divider>
-
-            <!-- Verification Section -->
-            <v-card variant="outlined" class="mb-2" v-if="gameStatus === 'paused'">
-              <v-card-title class="text-subtitle-1">Verify BINGO</v-card-title>
-              <v-card-text>
-                <v-text-field
-                  v-model="verifyCardNumber"
-                  label="Card Number"
-                  placeholder="CARD-001"
-                  variant="outlined"
-                  density="compact"
-                  class="mb-2"
-                ></v-text-field>
-
-                <v-btn
-                  color="success"
-                  block
-                  @click="verifyWin"
-                  :loading="verifying"
-                  class="mb-2"
-                >
-                  <v-icon>mdi-check-circle</v-icon>
-                  Verify Win
-                </v-btn>
-
-                <v-alert v-if="verificationResult" :type="verificationResult.isValid ? 'success' : 'error'" density="compact">
-                  {{ verificationResult.message }}
-                </v-alert>
-              </v-card-text>
-            </v-card>
 
             <v-btn
               color="error"
@@ -547,13 +563,92 @@
           </v-card-text>
         </v-card>
 
-        <!-- Winning Pattern Visualization (when valid win) -->
-        <v-card class="winning-pattern-card mt-4" v-if="verificationResult && verificationResult.isValid">
-          <v-card-title class="winning-title">
-            <v-icon class="mr-2">mdi-trophy</v-icon>
-            Winning Pattern - {{ activePattern.toUpperCase() }}
+        <!-- Verification Section - Below History Card -->
+        <v-card class="verify-card mt-4" v-if="canManageRoom && gameStatus === 'paused'">
+          <v-card-title class="verify-title">
+            <v-icon class="mr-2">mdi-check-decagram</v-icon>
+            Verify BINGO
           </v-card-title>
           <v-card-text class="pa-4">
+            <v-text-field
+              v-model="verifyCardNumber"
+              label="Card Number"
+              placeholder="Enter card number (e.g., 1 or CARD-001)"
+              variant="outlined"
+              density="comfortable"
+              class="mb-3"
+              prepend-inner-icon="mdi-card-account-details"
+            ></v-text-field>
+
+            <v-btn
+              color="success"
+              block
+              size="large"
+              @click="verifyWin"
+              :loading="verifying"
+              class="mb-3"
+              elevation="2"
+            >
+              <v-icon class="mr-2">mdi-check-circle</v-icon>
+              Verify Win
+            </v-btn>
+
+            <v-alert 
+              v-if="verificationResult" 
+              :type="verificationResult.isValid ? 'success' : 'error'" 
+              variant="tonal"
+              prominent
+            >
+              <template v-slot:prepend>
+                <v-icon :icon="verificationResult.isValid ? 'mdi-trophy' : 'mdi-alert-circle'"></v-icon>
+              </template>
+              {{ verificationResult.message }}
+            </v-alert>
+          </v-card-text>
+        </v-card>
+
+        <!-- Winning Pattern Visualization (when valid win OR late claim) -->
+        <v-card 
+          class="winning-pattern-card mt-4" 
+          :class="{ 'late-claim-card': verificationResult && verificationResult.lateClaim }"
+          v-if="verificationResult && (verificationResult.isValid || verificationResult.lateClaim)"
+        >
+          <v-card-title class="winning-title" :class="{ 'late-claim-title': verificationResult.lateClaim }">
+            <v-icon class="mr-2">{{ verificationResult.lateClaim ? 'mdi-clock-alert' : 'mdi-trophy' }}</v-icon>
+            <span v-if="verificationResult.lateClaim" style="color: #d32f2f;">
+              LATE CLAIM - Pattern Completed Earlier
+            </span>
+            <span v-else-if="verificationResult.patternNames && verificationResult.patternNames.length > 1">
+              Winning Patterns ({{ verificationResult.patternNames.length }}): {{ verificationResult.patternNames.join(', ') }}
+            </span>
+            <span v-else-if="verificationResult.patternNames && verificationResult.patternNames.length === 1">
+              Winning Pattern: {{ verificationResult.patternNames[0] }}
+            </span>
+            <span v-else>
+              Winning Pattern - {{ activePattern.toUpperCase() }}
+            </span>
+          </v-card-title>
+          <v-card-text class="pa-4">
+            <v-alert 
+              v-if="verificationResult.lateClaim" 
+              type="error" 
+              variant="tonal" 
+              density="compact"
+              class="mb-3"
+            >
+              <v-icon class="mr-2">mdi-alert-circle</v-icon>
+              This pattern was completed earlier. You must call BINGO immediately when you win!
+            </v-alert>
+            <v-alert 
+              v-else-if="verificationResult.patternNames && verificationResult.patternNames.length > 1" 
+              type="success" 
+              variant="tonal" 
+              density="compact"
+              class="mb-3"
+            >
+              <v-icon class="mr-2">mdi-star-circle</v-icon>
+              This card matches {{ verificationResult.patternNames.length }} different winning patterns!
+            </v-alert>
             <table class="winning-grid">
               <tbody>
                 <tr v-for="row in 5" :key="row">
@@ -663,7 +758,7 @@ const gameStatus = ref<'idle' | 'playing' | 'paused'>('idle');
 const currentPattern = ref('horizontal');
 const selectedPatternForMatch = ref('horizontal');
 const showUserManagement = ref(false);
-const showPatternPreview = ref(true);
+const showPatternPreview = ref(false); // Collapsed by default
 const showLogoutDialog = ref(false);
 const verifyCardNumber = ref('');
 const verifying = ref(false);
@@ -676,6 +771,17 @@ const betAmount = ref(10); // Bet amount per card in Birr
 const houseFee = ref(2); // House fee per card in Birr
 const showBettingModal = ref(false); // Show/hide betting configuration modal
 const selectedCardGrid = ref<number[][] | null>(null);
+
+// Calling speed control
+const callingSpeed = ref(3000); // Default 3 seconds
+const callingSpeedLabel = computed(() => {
+  const speed = callingSpeed.value / 1000;
+  if (speed <= 1.5) return 'Very Fast';
+  if (speed <= 2.5) return 'Fast';
+  if (speed <= 3.5) return 'Normal';
+  if (speed <= 4.5) return 'Slow';
+  return 'Very Slow';
+});
 const canManageRoomByApi = ref(false);
 const showCardDetailsModal = ref(false);
 const showShuffleRingModal = ref(false);
@@ -805,11 +911,17 @@ const speakMessage = async (message: string) => {
       'Congratulations': 'congratulations',
       'Invalid win': 'winner-invalid',
       'Invalid claim': 'card-locked',
+      'Late claim rejected': 'winner-invalid',
+      'must call BINGO immediately': 'winner-invalid',
+      'Starting new game': 'game-start',
       'Game started': 'game-start',
       'started successfully': 'game-start',
+      'Good luck everyone': 'game-start',
       'Game paused': 'game-paused',
+      'BINGO called': 'game-paused',
       'paused for BINGO': 'game-paused',
       'Game resumed': 'game-resumed',
+      'Continuing to call': 'game-resumed',
       'Please register': 'please-wait',
       'Card locked': 'card-locked',
       'locked due to': 'card-locked',
@@ -840,7 +952,7 @@ const speakMessage = async (message: string) => {
       await amharicAudio.playEvent('congratulations');
       return;
     }
-    if (message.toLowerCase().includes('invalid') || message.toLowerCase().includes('locked')) {
+    if (message.toLowerCase().includes('invalid') || message.toLowerCase().includes('locked') || message.toLowerCase().includes('rejected')) {
       console.log(`[Audio Debug] ✅ Playing Amharic invalid for: "${message}"`);
       await amharicAudio.playEvent('winner-invalid');
       return;
@@ -871,19 +983,35 @@ const speakMessage = async (message: string) => {
 const announceNumber = async (letter: string, number: number) => {
   console.log(`[Audio Debug] announceNumber called: ${letter}-${number}, language: ${currentLanguage.value}`);
   
+  // REMOVED: Special milestone announcements (10/75, 25/75, etc.)
+  // These count announcements have been removed per user request
+  
   if (currentLanguage.value === 'am') {
     try {
       console.log(`[Audio Debug] ✅ Playing Amharic number: ${letter}-${number}`);
       await amharicAudio.playNumber(letter, number);
       console.log(`[Audio Debug] ✅ Successfully played number: ${letter}-${number}`);
     } catch (error) {
-      console.error(`[Audio Debug] ❌ Error playing Amharic number: ${letter}-${number}`, error);
+      console.error(`[Audio Debug] ❌ Error playing Amharic number: ${letter}-${number}, falling back to English`, error);
+      // Fallback to English if Amharic audio fails
+      try {
+        const msg = new SpeechSynthesisUtterance(`${letter} ${number}`);
+        msg.lang = 'en-US';
+        msg.rate = 1.0;
+        msg.pitch = 1.1;
+        window.speechSynthesis.speak(msg);
+      } catch (fallbackError) {
+        console.error('[Audio Debug] ❌ Fallback speech synthesis error:', fallbackError);
+      }
     }
   } else {
     try {
       console.log(`[Audio Debug] Using English Web Speech API for: ${letter} ${number}`);
       const msg = new SpeechSynthesisUtterance(`${letter} ${number}`);
       msg.lang = 'en-US';
+      msg.rate = 1.0;
+      msg.pitch = 1.1;
+      msg.volume = 1.0;
       window.speechSynthesis.speak(msg);
     } catch (error) {
       console.error('[Audio Debug] ❌ Speech synthesis error:', error);
@@ -909,6 +1037,20 @@ const getPatternTitle = (pattern: string): string => {
 
 
 const getWinningPatternDetails = (): string => {
+  // Check if we have multiple patterns
+  const winningPatterns = verificationResult.value?.winningPatterns;
+  const patternNames = verificationResult.value?.patternNames;
+  
+  if (Array.isArray(winningPatterns) && winningPatterns.length > 0 && Array.isArray(patternNames)) {
+    // Multiple patterns - show all pattern names
+    if (winningPatterns.length > 1) {
+      return `${winningPatterns.length} patterns: ${patternNames.join(', ')}`;
+    }
+    // Single pattern with name
+    return patternNames[0] || '';
+  }
+  
+  // Fallback to old single pattern format
   const winningPattern = verificationResult.value?.winningPattern;
   if (!Array.isArray(winningPattern) || winningPattern.length === 0) {
     return '';
@@ -1103,7 +1245,7 @@ const logout = () => {
   router.push({ name: 'home' });
 };
 
-const startNewGame = () => {
+const startNewGame = async () => {
   if (!canManageRoom.value) {
     showToast('Only admin or assigned room manager can start a game.', 'warning');
     return;
@@ -1115,14 +1257,65 @@ const startNewGame = () => {
     return;
   }
 
+  // Unlock all cards from previous match before starting new game
+  if (room.value?.currentMatch?.id) {
+    try {
+      await services?.cardService.unlockMatch(room.value.currentMatch.id);
+      console.log(`[Game Start] Unlocked all cards from previous match #${room.value.currentMatch.id}`);
+    } catch (error) {
+      console.warn('[Game Start] Failed to unlock cards from previous match:', error);
+      // Continue anyway - this is not critical
+    }
+  }
+
   selectedPatternForMatch.value = currentPattern.value;
+  
+  // Announce game start and pattern
+  const patternTitle = getPatternTitle(currentPattern.value);
+  const startMessage = `Starting new game! We are playing for ${patternTitle}. Good luck everyone!`;
+  showToast(startMessage, 'success');
+  speakMessage(startMessage);
+  
+  // Convert card numbers to proper format (e.g., 1 -> ROOM9-CAR0001)
+  const currentRoomId = room.value?.id || 0;
+  const registeredCardNumbers = registeredCards.value.map(num => 
+    `ROOM${currentRoomId}-CAR${String(num).padStart(4, '0')}`
+  );
+  
+  console.log('[Frontend] Emitting new-match event:', {
+    roomId: roomId.value,
+    soldCards: registeredCards.value.length,
+    houseFeePerCard: houseFee.value,
+    registeredCards: registeredCardNumbers,
+  });
+  
+  // Check if socket is connected
+  if (!client || !client.connected) {
+    console.error('[Frontend] ❌ Socket not connected!');
+    showToast('Connection error. Please refresh the page.', 'error');
+    return;
+  }
+  
+  console.log('[Frontend] ✅ Socket connected, emitting event...');
+  
   client?.emit('new-match', {
     roomId: roomId.value,
     soldCards: registeredCards.value.length,
     houseFeePerCard: houseFee.value,
+    registeredCards: registeredCardNumbers, // Send the actual card numbers
+  }, (response: any) => {
+    // Acknowledgment callback
+    if (response?.error) {
+      console.error('[Frontend] ❌ Server error:', response.error);
+      showToast(`Error starting game: ${response.error}`, 'error');
+    } else {
+      console.log('[Frontend] ✅ Server acknowledged new-match event');
+    }
   });
   gameStatus.value = 'playing';
   matchWinners.value = []; // Clear winners list for new game
+  
+  showToast(`Game started with ${registeredCards.value.length} registered cards!`, 'success');
 };
 
 const normalizeCardNumber = (raw: string): string => {
@@ -1130,17 +1323,44 @@ const normalizeCardNumber = (raw: string): string => {
     .trim()
     .toUpperCase();
   if (!value) return '';
-  if (/^\d+$/.test(value)) {
-    return `CARD-${value.padStart(3, '0')}`;
+  
+  // If it's already in the ROOM-CAR format (e.g., ROOM9-CAR0001), return as-is
+  if (/^ROOM\d+-CAR\d+$/.test(value)) {
+    return value;
   }
+  
+  // If it's in SOEMB-CA format (old format), return as-is
+  if (value.startsWith('SOEMB-CA')) {
+    return value;
+  }
+  
+  // If it's just a number (e.g., "1", "11", "123")
+  if (/^\d+$/.test(value)) {
+    const num = parseInt(value, 10);
+    const currentRoomId = room.value?.id || 0;
+    return `ROOM${currentRoomId}-CAR${String(num).padStart(4, '0')}`;
+  }
+  
+  // If it starts with CARD- (e.g., "CARD-001", "CARD-1")
   if (value.startsWith('CARD-')) {
     const suffix = value.slice(5);
     if (/^\d+$/.test(suffix)) {
-      return `CARD-${suffix.padStart(3, '0')}`;
+      const num = parseInt(suffix, 10);
+      const currentRoomId = room.value?.id || 0;
+      return `ROOM${currentRoomId}-CAR${String(num).padStart(4, '0')}`;
     }
-    return value;
   }
-  return `CARD-${value}`;
+  
+  // Default: try to extract number and convert
+  const match = value.match(/\d+/);
+  if (match) {
+    const num = parseInt(match[0], 10);
+    const currentRoomId = room.value?.id || 0;
+    return `ROOM${currentRoomId}-CAR${String(num).padStart(4, '0')}`;
+  }
+  
+  // If all else fails, return as-is
+  return value;
 };
 
 const pauseGame = () => {
@@ -1148,11 +1368,23 @@ const pauseGame = () => {
     showToast('Only admin or assigned room manager can pause a game.', 'warning');
     return;
   }
+  
+  console.log('[PAUSE] ========== PAUSE GAME CLICKED ==========');
+  console.log('[PAUSE] Match ID:', room.value?.currentMatch?.id);
+  console.log('[PAUSE] Room ID:', roomId.value);
+  console.log('[PAUSE] Socket connected:', client?.connected);
+  console.log('[PAUSE] Emitting pause-match event...');
+  
   client?.emit('pause-match', { 
     matchId: room.value?.currentMatch?.id,
     roomId: roomId.value 
   });
+  
   gameStatus.value = 'paused';
+  console.log('[PAUSE] ✅ Game status set to paused');
+  
+  // Announce pause
+  speakMessage('Game paused. BINGO called!');
 };
 
 const resumeGame = () => {
@@ -1165,6 +1397,67 @@ const resumeGame = () => {
     roomId: roomId.value,
   });
   gameStatus.value = 'playing';
+  
+  // Announce resume
+  speakMessage('Game resumed. Continuing to call numbers.');
+};
+
+const changeCallingSpeed = (newSpeed: number) => {
+  if (!canManageRoom.value) {
+    showToast('Only admin or assigned room manager can change speed.', 'warning');
+    return;
+  }
+  
+  if (gameStatus.value !== 'playing') {
+    return;
+  }
+  
+  client?.emit('change-speed', {
+    matchId: room.value?.currentMatch?.id,
+    roomId: roomId.value,
+    speed: newSpeed,
+  });
+  
+  const speedLabel = callingSpeedLabel.value;
+  showToast(`Calling speed changed to ${speedLabel} (${(newSpeed / 1000).toFixed(1)}s)`, 'info');
+};
+
+const finishGame = () => {
+  if (!canManageRoom.value) {
+    showToast('Only admin or assigned room manager can finish a game.', 'warning');
+    return;
+  }
+  
+  if (matchWinners.value.length === 0) {
+    showToast('No winners verified yet.', 'warning');
+    return;
+  }
+  
+  // END THE GAME - All winners verified!
+  gameStatus.value = 'idle';
+  
+  // Announce game end with winner celebration
+  const winnerCount = matchWinners.value.length;
+  if (winnerCount === 1) {
+    speakMessage(`Congratulations to our winner! Game complete.`);
+  } else {
+    speakMessage(`Congratulations to all ${winnerCount} winners! Game complete.`);
+  }
+  
+  // Show game ended message
+  const winnersList = matchWinners.value.map(w => w.cardNumber).join(', ');
+  const gameEndMessage = `🎉 Game Over! Winners (${matchWinners.value.length}): ${winnersList}`;
+  showToast(gameEndMessage, 'success');
+  speakMessage(`Game ended. ${matchWinners.value.length} winner${matchWinners.value.length > 1 ? 's' : ''} verified!`);
+  
+  // Emit game end event to backend
+  if (room.value?.currentMatch?.id) {
+    client?.emit('end-match', {
+      matchId: room.value.currentMatch.id,
+      roomId: roomId.value,
+      winners: matchWinners.value
+    });
+  }
 };
 
 const resetGame = () => {
@@ -1172,6 +1465,7 @@ const resetGame = () => {
     showToast('Only admin or assigned room manager can reset a game.', 'warning');
     return;
   }
+  
   // Emit reset event to backend
   if (room.value?.currentMatch?.id) {
     client?.emit('reset-match', {
@@ -1180,18 +1474,24 @@ const resetGame = () => {
     });
   }
   
-  // Reset frontend state
+  // Immediately clear all frontend state for fast response
   calledNumbers.value = [];
   lastCalledNumber.value = 0;
   gameStatus.value = 'idle';
   verificationResult.value = null;
   verifyCardNumber.value = '';
-  matchWinners.value = []; // Clear winners list
+  matchWinners.value = [];
+  registeredCards.value = [];
+  selectedCardForView.value = null;
+  selectedCardGrid.value = null;
+  showCardDetailsModal.value = false;
   
   // Unlock all cards for this match
   if (room.value?.currentMatch?.id) {
     services?.cardService.unlockMatch(room.value.currentMatch.id);
   }
+  
+  showToast('Game reset successfully', 'success');
 };
 
 const verifyWin = async () => {
@@ -1216,18 +1516,6 @@ const verifyWin = async () => {
   try {
     const normalizedCardNumber = normalizeCardNumber(verifyCardNumber.value);
     
-    // Extract card number from normalized format (e.g., "CARD-5" -> 5)
-    const cardNumber = Number(normalizedCardNumber.replace('CARD-', ''));
-    
-    // Check if card is registered
-    if (!isCardRegistered(cardNumber)) {
-      const notRegisteredMessage = `Card ${normalizedCardNumber} is not registered. Only registered cards can win.`;
-      showToast(notRegisteredMessage, 'error');
-      speakMessage(`Card ${normalizedCardNumber} is not registered.`);
-      verifying.value = false;
-      return;
-    }
-    
     const response = await services?.cardService.verify(
       normalizedCardNumber,
       calledNumbers.value,
@@ -1236,10 +1524,15 @@ const verifyWin = async () => {
     
     verificationResult.value = response?.data;
     verifyCardNumber.value = normalizedCardNumber;
-    const selectedCardNumber = Number(normalizedCardNumber.replace('CARD-', ''));
-    if (!Number.isNaN(selectedCardNumber)) {
-      selectedCardForView.value = selectedCardNumber;
-      await viewCardDetails(selectedCardNumber);
+    
+    // Extract card number for viewing details
+    const cardNumMatch = normalizedCardNumber.match(/\d+$/);
+    if (cardNumMatch) {
+      const selectedCardNumber = Number(cardNumMatch[0]);
+      if (!Number.isNaN(selectedCardNumber)) {
+        selectedCardForView.value = selectedCardNumber;
+        await viewCardDetails(selectedCardNumber);
+      }
     }
 
     if (response?.data.isValid) {
@@ -1274,21 +1567,95 @@ const verifyWin = async () => {
         showToast(winnersInfo, 'info');
       }
       
+      // Keep game PAUSED to allow verifying more winners
       gameStatus.value = 'paused';
+      
+      // Clear the input for next verification
+      verifyCardNumber.value = '';
+      
+      // Show message about verifying more winners
+      const moreWinnersMessage = `Winner verified! You can verify more winners or click "Finish Game" to end.`;
+      showToast(moreWinnersMessage, 'info');
+    } else if (response?.data.unregistered) {
+      // Card is not registered for this match - BLOCK verification
+      const unregisteredMessage = `❌ UNREGISTERED CARD! ${response?.data.message || 'This card was not registered for this game.'}`;
+      showToast(unregisteredMessage, 'error');
+      speakMessage(`Card not registered. Only registered cards can win.`);
+      
+      // Do NOT lock the card, just reject the verification
+      // Auto-resume if no valid winners exist
+      if (matchWinners.value.length === 0) {
+        showToast('Game resuming automatically...', 'info');
+        setTimeout(() => resumeGame(), 2000);
+      }
     } else if (response?.data.cardLocked) {
+      // Card is locked from previous wrong claim
       const lockedMessage = `Card ${normalizedCardNumber} is locked due to a previous wrong claim.`;
       showToast(lockedMessage, 'error');
       speakMessage(`Invalid claim. ${normalizedCardNumber} is locked.`);
-    } else {
-      const invalidMessage = `Invalid win. Card ${normalizedCardNumber} will be locked until game ends.`;
-      showToast(invalidMessage, 'error');
-      speakMessage(`Invalid win for ${normalizedCardNumber}. The card is now locked.`);
-      // Lock the card
-      if (room.value?.currentMatch?.id) {
-        await services?.cardService.lockCard(normalizedCardNumber, room.value.currentMatch.id);
+      
+      // Auto-resume if no valid winners exist
+      if (matchWinners.value.length === 0) {
+        showToast('Game resuming automatically...', 'info');
+        setTimeout(() => resumeGame(), 1500);
       }
-      // Resume game
-      resumeGame();
+    } else {
+      // Invalid claim - check if it's a timing issue (late claim)
+      const isLateClaim = response?.data.lateClaim || 
+                          response?.data.message?.includes('Pattern was completed earlier') || 
+                          response?.data.message?.includes('not on the current number');
+      
+      if (isLateClaim) {
+        // Late BINGO claim - pattern was completed earlier
+        // BUT still show the winning pattern so manager can see what was completed
+        const lateClaimMessage = `❌ LATE CLAIM! ${response?.data.message || 'You must call BINGO immediately when you win!'}`;
+        showToast(lateClaimMessage, 'error');
+        
+        // Play late claim audio (Amharic toast)
+        if (currentLanguage.value === 'am') {
+          try {
+            await amharicAudio.playToast('winner-late');
+            console.log('[Audio Debug] ✅ Played late claim toast audio');
+          } catch (error) {
+            console.error('[Audio Debug] ❌ Error playing late claim audio:', error);
+            // Fallback to text-to-speech
+            speakMessage('Late claim rejected. You must call BINGO immediately. Click the resume button.');
+          }
+        } else {
+          speakMessage('Late claim rejected. You must call BINGO immediately. Click the resume button.');
+        }
+        
+        // Show additional info about the late claim
+        if (response?.data.patternNames && response?.data.patternNames.length > 0) {
+          const patternInfo = `Pattern completed: ${response.data.patternNames.join(', ')}`;
+          showToast(patternInfo, 'warning');
+        }
+        
+        // NOTE: verificationResult is already set above, so the pattern will display
+        // The winning pattern grid will show even though it's a late claim
+        
+        // Don't auto-resume - let manager click resume button
+        showToast('Click RESUME button to continue the game', 'info');
+      } else {
+        // Regular invalid claim - lock the card
+        const invalidMessage = `Invalid win. Card ${normalizedCardNumber} will be locked until game ends.`;
+        showToast(invalidMessage, 'error');
+        speakMessage(`Invalid win for ${normalizedCardNumber}. The card is now locked.`);
+        
+        // Lock the card
+        if (room.value?.currentMatch?.id) {
+          await services?.cardService.lockCard(normalizedCardNumber, room.value.currentMatch.id);
+        }
+        
+        // Only resume game if NO winners have been verified yet
+        // If there are already winners, the game should stay paused
+        if (matchWinners.value.length === 0) {
+          showToast('Game resuming automatically...', 'info');
+          setTimeout(() => resumeGame(), 1500);
+        } else {
+          showToast('Invalid claim. Game remains paused because valid winners exist.', 'info');
+        }
+      }
     }
   } catch (error) {
     console.error('Error verifying win:', error);
@@ -1398,8 +1765,21 @@ const isPatternCell = (row: number, col: number, pattern: string) => {
 };
 
 const isWinningPatternCell = (row: number, col: number) => {
-  if (!verificationResult.value || !verificationResult.value.winningPattern) return false;
-  return verificationResult.value.winningPattern.some(([r, c]) => r === row && c === col);
+  if (!verificationResult.value) return false;
+  
+  // Check all winning patterns if available
+  const winningPatterns = verificationResult.value.winningPatterns;
+  if (Array.isArray(winningPatterns) && winningPatterns.length > 0) {
+    // Check if this cell is in ANY of the winning patterns
+    return winningPatterns.some(pattern => 
+      pattern.some(([r, c]) => r === row && c === col)
+    );
+  }
+  
+  // Fallback to single pattern
+  const winningPattern = verificationResult.value.winningPattern;
+  if (!winningPattern) return false;
+  return winningPattern.some(([r, c]) => r === row && c === col);
 };
 
 onMounted(async () => {
@@ -1414,20 +1794,54 @@ onMounted(async () => {
     console.log('Room response:', room.value);
     
     if (room.value?.currentMatch?.matchNumbers) {
-      calledNumbers.value = room.value.currentMatch.matchNumbers.map((mn: any) => mn.number);
-      lastCalledNumber.value = calledNumbers.value[calledNumbers.value.length - 1] || 0;
-      
       // Set game status based on match state
       if (room.value.currentMatch.closed) {
+        // Match is closed - clear all state for fresh start
         gameStatus.value = 'idle';
-      } else if (calledNumbers.value.length > 0) {
+        calledNumbers.value = [];
+        lastCalledNumber.value = 0;
+        verificationResult.value = null;
+        verifyCardNumber.value = '';
+        matchWinners.value = [];
+      } else if (room.value.currentMatch.matchNumbers.length > 0) {
+        // Match is active - load the numbers
+        calledNumbers.value = room.value.currentMatch.matchNumbers.map((mn: any) => mn.number);
+        lastCalledNumber.value = calledNumbers.value[calledNumbers.value.length - 1] || 0;
         gameStatus.value = 'playing';
         selectedPatternForMatch.value = currentPattern.value;
       }
+    } else {
+      // No match exists - ensure clean state
+      gameStatus.value = 'idle';
+      calledNumbers.value = [];
+      lastCalledNumber.value = 0;
+      verificationResult.value = null;
+      verifyCardNumber.value = '';
+      matchWinners.value = [];
     }
 
     // Connect to socket AFTER room is loaded
     client?.emit(ON_ENTER_ROOM_EVENT, { roomId: roomId.value });
+    
+    // Monitor socket connection status
+    console.log('[Socket] Connection status:', client?.connected ? 'CONNECTED ✅' : 'DISCONNECTED ❌');
+    
+    client?.on('connect', () => {
+      console.log('[Socket] ✅ Connected to server');
+      showToast('Connected to game server', 'success');
+      // Rejoin room after reconnection
+      client?.emit(ON_ENTER_ROOM_EVENT, { roomId: roomId.value });
+    });
+    
+    client?.on('disconnect', (reason) => {
+      console.log('[Socket] ❌ Disconnected from server. Reason:', reason);
+      showToast('Disconnected from server. Reconnecting...', 'warning');
+    });
+    
+    client?.on('connect_error', (error) => {
+      console.error('[Socket] ❌ Connection error:', error);
+      showToast('Connection error. Please check your internet.', 'error');
+    });
 
     // Setup socket listeners
     client?.on(EXTRACTED_NUMBERS_EVENT, ({ number }) => {
@@ -1462,12 +1876,17 @@ onMounted(async () => {
 
     client?.on('match-reset', () => {
       console.log('Match reset');
+      // Clear all state immediately
       calledNumbers.value = [];
       lastCalledNumber.value = 0;
       gameStatus.value = 'idle';
       verificationResult.value = null;
       verifyCardNumber.value = '';
-      matchWinners.value = []; // Clear winners on reset
+      matchWinners.value = [];
+      registeredCards.value = [];
+      selectedCardForView.value = null;
+      selectedCardGrid.value = null;
+      showCardDetailsModal.value = false;
     });
   } catch (error) {
     console.error('Error loading room:', error);
@@ -1521,75 +1940,159 @@ onBeforeUnmount(() => {
 }
 
 .info-card {
-  background: white !important;
-  border-radius: 12px !important;
+  background: linear-gradient(145deg, #ffffff 0%, #f8f9fa 100%) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
+  border: 1px solid rgba(255, 255, 255, 0.8) !important;
 }
 
 .info-card-title {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
   color: white !important;
-  padding: 16px !important;
+  padding: 20px !important;
+  border-radius: 16px 16px 0 0 !important;
+  
+  h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    margin: 0;
+  }
 }
 
 .current-ball {
-  margin: 20px auto;
+  margin: 24px auto;
+  padding: 16px;
+  background: linear-gradient(145deg, #f8f9fa 0%, #ffffff 100%);
+  border-radius: 20px;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .ball-display {
-  width: 180px;
-  height: 180px;
+  width: 160px;
+  height: 160px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 5rem;
-  font-weight: bold;
+  font-size: 4.5rem;
+  font-weight: 800;
   color: white;
   margin: 0 auto;
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
-  border: 6px solid white;
+  box-shadow: 
+    0 12px 28px rgba(0, 0, 0, 0.25),
+    0 0 0 8px rgba(255, 255, 255, 0.9),
+    inset 0 -8px 16px rgba(0, 0, 0, 0.15);
+  border: none;
   animation: pulse 2s infinite;
+  position: relative;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: 15%;
+    left: 20%;
+    width: 40%;
+    height: 30%;
+    background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.4) 0%, transparent 70%);
+    border-radius: 50%;
+    transform: rotate(-45deg);
+  }
 }
 
 @keyframes pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.05); }
+  0%, 100% { transform: scale(1); box-shadow: 0 12px 28px rgba(0, 0, 0, 0.25), 0 0 0 8px rgba(255, 255, 255, 0.9), inset 0 -8px 16px rgba(0, 0, 0, 0.15); }
+  50% { transform: scale(1.05); box-shadow: 0 16px 36px rgba(0, 0, 0, 0.3), 0 0 0 10px rgba(255, 255, 255, 0.95), inset 0 -10px 20px rgba(0, 0, 0, 0.2); }
 }
 
 .ball-letter {
-  font-size: 2.5rem;
-  font-weight: bold;
-  margin-top: 15px;
-  color: white;
-  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+  font-size: 2rem;
+  font-weight: 800;
+  margin-top: 12px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: none;
+  letter-spacing: 2px;
 }
 
-.ball-b { background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%); }
-.ball-i { background: linear-gradient(135deg, #d32f2f 0%, #c62828 100%); }
-.ball-n { background: linear-gradient(135deg, #388e3c 0%, #2e7d32 100%); }
-.ball-g { background: linear-gradient(135deg, #f57c00 0%, #ef6c00 100%); }
-.ball-o { background: linear-gradient(135deg, #7b1fa2 0%, #6a1b9a 100%); }
+.ball-b { 
+  background: linear-gradient(135deg, #2196f3 0%, #1565c0 100%);
+  box-shadow: 
+    0 12px 28px rgba(33, 150, 243, 0.4),
+    0 0 0 8px rgba(255, 255, 255, 0.9),
+    inset 0 -8px 16px rgba(0, 0, 0, 0.15);
+}
+.ball-i { 
+  background: linear-gradient(135deg, #ef5350 0%, #c62828 100%);
+  box-shadow: 
+    0 12px 28px rgba(239, 83, 80, 0.4),
+    0 0 0 8px rgba(255, 255, 255, 0.9),
+    inset 0 -8px 16px rgba(0, 0, 0, 0.15);
+}
+.ball-n { 
+  background: linear-gradient(135deg, #66bb6a 0%, #2e7d32 100%);
+  box-shadow: 
+    0 12px 28px rgba(102, 187, 106, 0.4),
+    0 0 0 8px rgba(255, 255, 255, 0.9),
+    inset 0 -8px 16px rgba(0, 0, 0, 0.15);
+}
+.ball-g { 
+  background: linear-gradient(135deg, #ffa726 0%, #ef6c00 100%);
+  box-shadow: 
+    0 12px 28px rgba(255, 167, 38, 0.4),
+    0 0 0 8px rgba(255, 255, 255, 0.9),
+    inset 0 -8px 16px rgba(0, 0, 0, 0.15);
+}
+.ball-o { 
+  background: linear-gradient(135deg, #ab47bc 0%, #6a1b9a 100%);
+  box-shadow: 
+    0 12px 28px rgba(171, 71, 188, 0.4),
+    0 0 0 8px rgba(255, 255, 255, 0.9),
+    inset 0 -8px 16px rgba(0, 0, 0, 0.15);
+}
 
 .recent-numbers {
   display: flex;
   justify-content: center;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
   margin-top: 20px;
+  padding: 12px;
+  background: linear-gradient(145deg, #f8f9fa 0%, #ffffff 100%);
+  border-radius: 16px;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .recent-ball {
-  width: 60px;
-  height: 60px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.4rem;
-  font-weight: bold;
+  font-size: 1.3rem;
+  font-weight: 800;
   color: white;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-  border: 3px solid white;
+  box-shadow: 
+    0 6px 16px rgba(0, 0, 0, 0.2),
+    0 0 0 4px rgba(255, 255, 255, 0.9),
+    inset 0 -4px 8px rgba(0, 0, 0, 0.15);
+  border: none;
+  position: relative;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: 15%;
+    left: 20%;
+    width: 35%;
+    height: 25%;
+    background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.35) 0%, transparent 70%);
+    border-radius: 50%;
+    transform: rotate(-45deg);
+  }
 }
 
 .board-card {
@@ -1679,30 +2182,46 @@ onBeforeUnmount(() => {
 }
 
 .v-card {
-  border-radius: 12px !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12) !important;
+  overflow: hidden !important;
+  
+  .v-card-title {
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+  
+  .v-card-text {
+    padding: 20px !important;
+  }
 }
 
 .control-card {
-  background: white !important;
-  border: 2px solid #667eea !important;
+  background: linear-gradient(145deg, #ffffff 0%, #f8f9fa 100%) !important;
+  border: 1px solid rgba(102, 126, 234, 0.2) !important;
 }
 
 .control-title {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  font-weight: bold;
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
+  color: white !important;
+  font-weight: 700 !important;
+  padding: 16px 20px !important;
 }
 
 .verify-card {
-  background: white !important;
+  background: linear-gradient(145deg, #ffffff 0%, #f8f9fa 100%) !important;
   border: 2px solid #4caf50 !important;
+  border-radius: 16px !important;
+  box-shadow: 0 8px 24px rgba(76, 175, 80, 0.15) !important;
 }
 
 .verify-title {
-  background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
-  color: white;
-  font-weight: bold;
+  background: linear-gradient(135deg, #66bb6a 0%, #43a047 100%) !important;
+  color: white !important;
+  font-weight: 700 !important;
+  padding: 20px !important;
+  border-radius: 16px 16px 0 0 !important;
+  font-size: 1.2rem !important;
 }
 
 .pause-btn {
@@ -1794,23 +2313,57 @@ onBeforeUnmount(() => {
 
 .card-selection-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
-  gap: 8px;
-  max-height: 400px;
-  overflow-y: auto;
-  padding: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  gap: 10px;
+  padding: 12px;
   background: #0f0f1e;
   border-radius: 8px;
+  width: 100%;
+}
+
+/* Responsive grid for different screen sizes */
+@media (min-width: 1920px) {
+  .card-selection-grid {
+    grid-template-columns: repeat(20, 1fr);
+    gap: 12px;
+  }
+}
+
+@media (min-width: 1600px) and (max-width: 1919px) {
+  .card-selection-grid {
+    grid-template-columns: repeat(16, 1fr);
+    gap: 10px;
+  }
+}
+
+@media (min-width: 1200px) and (max-width: 1599px) {
+  .card-selection-grid {
+    grid-template-columns: repeat(13, 1fr);
+    gap: 9px;
+  }
+}
+
+@media (min-width: 900px) and (max-width: 1199px) {
+  .card-selection-grid {
+    grid-template-columns: repeat(10, 1fr);
+    gap: 8px;
+  }
+}
+
+@media (max-width: 899px) {
+  .card-selection-grid {
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px;
+  }
 }
 
 .card-number-cell {
-  width: 60px;
-  height: 60px;
+  aspect-ratio: 1 / 1;
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.1rem;
+  font-size: 1.2rem;
   font-weight: bold;
   color: white;
   font-family: 'Courier New', monospace;
@@ -1818,13 +2371,14 @@ onBeforeUnmount(() => {
   border: 2px solid rgba(123, 31, 162, 0.3);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all 0.2s ease;
   user-select: none;
   
   &:hover {
-    transform: scale(1.05);
+    transform: scale(1.08);
     box-shadow: 0 4px 12px rgba(123, 31, 162, 0.6);
     border-color: rgba(123, 31, 162, 0.8);
+    z-index: 2;
   }
   
   &.card-registered {
@@ -1837,6 +2391,19 @@ onBeforeUnmount(() => {
     background: linear-gradient(135deg, #9c27b0 0%, #7b1fa2 100%);
     border-color: #e1bee7;
     box-shadow: 0 0 20px rgba(156, 39, 176, 0.8);
+    z-index: 1;
+  }
+}
+
+@media (min-width: 1600px) {
+  .card-number-cell {
+    font-size: 1.4rem;
+  }
+}
+
+@media (max-width: 899px) {
+  .card-number-cell {
+    font-size: 0.9rem;
   }
 }
 
@@ -1854,39 +2421,39 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: 12px 20px;
 }
 
 .reward-label-text {
-  font-size: 1rem;
+  font-size: 0.95rem;
   color: white;
   font-weight: 600;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
   text-align: center;
 }
 
 .reward-ball {
-  width: 120px;
-  height: 120px;
+  width: 100px;
+  height: 100px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 2.5rem;
+  font-size: 2.2rem;
   font-weight: bold;
   color: white;
   background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
-  border: 6px solid white;
+  border: 5px solid white;
   animation: pulse 2s infinite;
-  margin: 8px 0;
+  margin: 6px 0;
 }
 
 .reward-currency {
-  font-size: 1.2rem;
+  font-size: 1.1rem;
   color: #4caf50;
   font-weight: bold;
-  margin-top: 8px;
+  margin-top: 6px;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
@@ -2061,6 +2628,10 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: center;
   margin: 20px 0;
+  padding: 16px;
+  background: linear-gradient(145deg, #f8f9fa 0%, #ffffff 100%);
+  border-radius: 16px;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .pattern-card-header {
@@ -2068,39 +2639,55 @@ onBeforeUnmount(() => {
   justify-content: space-around;
   width: 100%;
   max-width: 280px;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
+  gap: 4px;
 }
 
 .pattern-header-letter {
   width: 50px;
-  height: 40px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.5rem;
-  font-weight: bold;
+  font-size: 1.4rem;
+  font-weight: 800;
   color: white;
-  border-radius: 6px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  box-shadow: 
+    0 4px 12px rgba(0, 0, 0, 0.2),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.15);
+  position: relative;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: 8px;
+    left: 12px;
+    width: 20px;
+    height: 12px;
+    background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.3) 0%, transparent 70%);
+    border-radius: 50%;
+    transform: rotate(-45deg);
+  }
   
   &.letter-b {
-    background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%); // Blue
+    background: linear-gradient(135deg, #2196f3 0%, #1565c0 100%);
   }
   
   &.letter-i {
-    background: linear-gradient(135deg, #d32f2f 0%, #c62828 100%); // Red
+    background: linear-gradient(135deg, #ef5350 0%, #c62828 100%);
   }
   
   &.letter-n {
-    background: linear-gradient(135deg, #388e3c 0%, #2e7d32 100%); // Green
+    background: linear-gradient(135deg, #66bb6a 0%, #2e7d32 100%);
   }
   
   &.letter-g {
-    background: linear-gradient(135deg, #f57c00 0%, #ef6c00 100%); // Orange
+    background: linear-gradient(135deg, #ffa726 0%, #ef6c00 100%);
   }
   
   &.letter-o {
-    background: linear-gradient(135deg, #7b1fa2 0%, #6a1b9a 100%); // Purple
+    background: linear-gradient(135deg, #ab47bc 0%, #6a1b9a 100%);
   }
 }
 
@@ -2108,40 +2695,46 @@ onBeforeUnmount(() => {
   border-collapse: separate;
   border-spacing: 4px;
   background: #1a1a2e;
-  padding: 8px;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  padding: 10px;
+  border-radius: 12px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
 }
 
 .pattern-cell {
   width: 50px;
   height: 50px;
   text-align: center;
-  font-size: 1.2rem;
-  font-weight: bold;
-  background: white;
-  color: #333;
-  border: 2px solid #ddd;
-  border-radius: 6px;
-  transition: all 0.3s;
+  font-size: 1.1rem;
+  font-weight: 700;
+  background: linear-gradient(145deg, #ffffff 0%, #f5f5f5 100%);
+  color: #666;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   
   &.pattern-active {
-    background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
+    background: linear-gradient(135deg, #66bb6a 0%, #43a047 100%);
     color: white;
     border-color: #2e7d32;
-    box-shadow: 0 0 10px rgba(76, 175, 80, 0.6);
-    font-weight: bold;
+    box-shadow: 
+      0 4px 12px rgba(76, 175, 80, 0.5),
+      0 0 0 2px rgba(255, 255, 255, 0.3);
+    font-weight: 800;
+    transform: scale(1.05);
   }
   
   &.pattern-free {
-    background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+    background: linear-gradient(135deg, #ffd54f 0%, #ffca28 100%);
     color: #333;
-    font-size: 0.8rem;
-    font-weight: bold;
+    font-size: 0.75rem;
+    font-weight: 800;
+    border-color: #fbc02d;
     
     &.pattern-active {
-      background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
+      background: linear-gradient(135deg, #66bb6a 0%, #43a047 100%);
       color: white;
+      border-color: #2e7d32;
     }
   }
 }
@@ -2151,10 +2744,20 @@ onBeforeUnmount(() => {
   border: 3px solid #fbc02d !important;
 }
 
+.late-claim-card {
+  background: linear-gradient(135deg, #ffcdd2 0%, #ef9a9a 100%) !important;
+  border: 3px solid #d32f2f !important;
+}
+
 .winning-title {
   background: linear-gradient(135deg, #fbc02d 0%, #f9a825 100%);
   color: #333;
   font-weight: bold;
+}
+
+.late-claim-title {
+  background: linear-gradient(135deg, #d32f2f 0%, #c62828 100%) !important;
+  color: white !important;
 }
 
 .winning-grid {
