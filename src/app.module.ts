@@ -66,7 +66,7 @@ const getStaticFilesPath = () => {
           };
         }
         return {
-          type: 'mysql',
+          type: 'postgres',
           host: configService.get<string>('DB_HOST'),
           port: configService.get<number>('DB_PORT'),
           username: configService.get<string>('DB_USER'),
@@ -74,6 +74,7 @@ const getStaticFilesPath = () => {
           database: configService.get<string>('DB_NAME'),
           entities: [Room, RoomPrize, RoomManager, User, Match, MatchNumber, Card],
           synchronize: true,
+          ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
         };
       },
       inject: [ConfigService],
