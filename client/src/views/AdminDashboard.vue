@@ -171,6 +171,28 @@
       </v-container>
     </v-main>
 
+    <!-- Action Confirmation Dialog -->
+    <v-dialog v-model="confirmDialog.show" max-width="450" persistent>
+      <v-card>
+        <v-card-title class="text-h5">
+          <v-icon class="mr-2" :color="confirmDialog.confirmColor">mdi-alert-circle-outline</v-icon>
+          {{ confirmDialog.title }}
+        </v-card-title>
+        <v-card-text>
+          {{ confirmDialog.message }}
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn color="grey" variant="text" @click="cancelConfirm">
+            Cancel
+          </v-btn>
+          <v-btn :color="confirmDialog.confirmColor" variant="elevated" @click="executeConfirm">
+            {{ confirmDialog.confirmLabel }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Logout Confirmation Dialog -->
     <v-dialog v-model="showLogoutDialog" max-width="400">
       <v-card>
@@ -198,21 +220,48 @@
     <v-snackbar
       v-model="toast.show"
       :color="toast.color"
-      timeout="3000"
+      :timeout="4000"
+      location="top"
+      variant="elevated"
+      class="admin-toast"
     >
-      {{ toast.message }}
+      <div class="d-flex align-center">
+        <v-icon
+          v-if="toast.color === 'success'"
+          class="mr-2"
+          icon="mdi-check-circle"
+        />
+        <v-icon
+          v-else-if="toast.color === 'error'"
+          class="mr-2"
+          icon="mdi-alert-circle"
+        />
+        <v-icon
+          v-else-if="toast.color === 'warning'"
+          class="mr-2"
+          icon="mdi-alert"
+        />
+        <span>{{ toast.message }}</span>
+      </div>
+      <template #actions>
+        <v-btn
+          variant="text"
+          icon="mdi-close"
+          @click="toast.show = false"
+        />
+      </template>
     </v-snackbar>
   </div>
 </template>
 
 <script setup lang="ts">
-import { useAdminDashboard } from '@/composables/useAdminDashboard';
-import AdminDashboardTab from '@/components/admin/AdminDashboardTab.vue';
-import AdminRoomsTab from '@/components/admin/AdminRoomsTab.vue';
-import AdminUsersTab from '@/components/admin/AdminUsersTab.vue';
-import AdminRegisterTab from '@/components/admin/AdminRegisterTab.vue';
-import AdminCardsTab from '@/components/admin/AdminCardsTab.vue';
-import AdminProfileTab from '@/components/admin/AdminProfileTab.vue';
+import { useAdminDashboard } from '../composables/useAdminDashboard';
+import AdminDashboardTab from '../components/admin/AdminDashboardTab.vue';
+import AdminRoomsTab from '../components/admin/AdminRoomsTab.vue';
+import AdminUsersTab from '../components/admin/AdminUsersTab.vue';
+import AdminRegisterTab from '../components/admin/AdminRegisterTab.vue';
+import AdminCardsTab from '../components/admin/AdminCardsTab.vue';
+import AdminProfileTab from '../components/admin/AdminProfileTab.vue';
 
 const {
   user,
@@ -220,6 +269,9 @@ const {
   drawer,
   rail,
   toast,
+  confirmDialog,
+  cancelConfirm,
+  executeConfirm,
   activeTab,
   confirmLogout,
   logout,

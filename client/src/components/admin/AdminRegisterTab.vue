@@ -11,7 +11,11 @@
                     <p class="text-body-2 text-grey">Create a new account for the system</p>
                   </div>
 
-                  <v-form @submit.prevent="registerUser">
+                  <v-form
+                    :key="formKey"
+                    ref="registerFormRef"
+                    @submit.prevent="handleRegister"
+                  >
                     <div class="form-section mb-4">
                       <h3 class="text-subtitle-1 font-weight-bold mb-3">
                         <v-icon class="mr-2" color="primary" size="small">mdi-account-circle</v-icon>
@@ -28,10 +32,8 @@
                         class="mb-3"
                         hint="Minimum 3 characters, alphanumeric"
                         persistent-hint
-                        :rules="[
-                          v => !!v || 'Username is required',
-                          v => v.length >= 3 || 'Minimum 3 characters'
-                        ]"
+                        validate-on="blur"
+                        :rules="usernameRules"
                       >
                         <template v-slot:append-inner>
                           <v-icon v-if="newUser.username.length >= 3" color="success" size="small">mdi-check-circle</v-icon>
@@ -48,10 +50,8 @@
                         density="comfortable"
                         hint="Minimum 6 characters for security"
                         persistent-hint
-                        :rules="[
-                          v => !!v || 'Password is required',
-                          v => v.length >= 6 || 'Minimum 6 characters'
-                        ]"
+                        validate-on="blur"
+                        :rules="passwordRules"
                       >
                         <template v-slot:append-inner>
                           <v-icon v-if="newUser.password.length >= 6" color="success" size="small">mdi-check-circle</v-icon>
@@ -115,6 +115,7 @@
                       block
                       elevation="2"
                       class="register-submit-btn"
+                      :loading="registering"
                     >
                       <v-icon class="mr-2">mdi-account-plus</v-icon>
                       Create User Account
@@ -128,11 +129,43 @@
 
 
 <script setup lang="ts">
-import { useAdminDashboard } from '@/composables/useAdminDashboard';
+import { ref } from 'vue';
+import { useAdminDashboard } from '../../composables/useAdminDashboard';
 
 const {
   newUser,
   registerUser,
-  user,
 } = useAdminDashboard();
+
+const registerFormRef = ref<{ validate: () => Promise<{ valid: boolean }> } | null>(null);
+const formKey = ref(0);
+const registering = ref(false);
+
+const usernameRules = [
+  (v: string) => !!v?.trim() || 'Username is required',
+  (v: string) => (v?.trim().length ?? 0) >= 3 || 'Minimum 3 characters',
+];
+
+const passwordRules = [
+  (v: string) => !!v || 'Password is required',
+  (v: string) => (v?.length ?? 0) >= 6 || 'Minimum 6 characters',
+];
+
+async function handleRegister() {
+  const form = registerFormRef.value;
+  if (!form) return;
+
+  const { valid } = await form.validate();
+  if (!valid) return;
+
+  registering.value = true;
+  try {
+    const success = await registerUser();
+    if (success) {
+      formKey.value += 1;
+    }
+  } finally {
+    registering.value = false;
+  }
+}
 </script>

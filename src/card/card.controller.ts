@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Post,
@@ -7,7 +8,6 @@ import {
   Delete,
   UseGuards,
   ParseIntPipe,
-  Query,
 } from '@nestjs/common';
 import { CardService } from './card.service';
 import { CreateCardDto } from './dto/create-card.dto';
@@ -26,9 +26,17 @@ export class CardController {
     return this.cardService.create(createCardDto);
   }
 
+  /** @deprecated Use POST /rooms/:roomId/generate-cards */
   @Post('bulk-generate')
   async generateBulk(@Body() body: { roomId?: number }) {
-    return this.cardService.generateBulkCards(body.roomId);
+    if (body?.roomId) {
+      throw new BadRequestException(
+        `Use POST /rooms/${body.roomId}/generate-cards instead of bulk-generate.`,
+      );
+    }
+    throw new BadRequestException(
+      'Global bulk card generation is deprecated. Create or select a room and use POST /rooms/:roomId/generate-cards.',
+    );
   }
 
   @Post('verify')
@@ -62,11 +70,8 @@ export class CardController {
   }
 
   @Get('room/:roomId')
-  async findByRoom(
-    @Param('roomId', ParseIntPipe) roomId: number,
-    @Query('summary') summary?: string,
-  ) {
-    return this.cardService.findByRoom(roomId, summary === 'true');
+  async findByRoom(@Param('roomId', ParseIntPipe) roomId: number) {
+    return this.cardService.findByRoom(roomId);
   }
 
   @Get('user/:userId/room/:roomId')

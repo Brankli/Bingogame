@@ -145,13 +145,37 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Confirmation Dialog -->
+    <v-dialog v-model="confirmDialog.show" max-width="450" persistent>
+      <v-card>
+        <v-card-title class="text-h5">
+          <v-icon class="mr-2" :color="confirmDialog.confirmColor">mdi-alert-circle-outline</v-icon>
+          {{ confirmDialog.title }}
+        </v-card-title>
+        <v-card-text>{{ confirmDialog.message }}</v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn color="grey" variant="text" @click="cancelConfirm">Cancel</v-btn>
+          <v-btn :color="confirmDialog.confirmColor" variant="elevated" @click="executeConfirm">
+            {{ confirmDialog.confirmLabel }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Toast Notification -->
+    <v-snackbar v-model="toast.show" :color="toast.color" timeout="3000">
+      {{ toast.message }}
+    </v-snackbar>
   </v-container>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, inject } from 'vue';
-import { Services } from '@/services';
-import { useAuth } from '@/store/auth';
+import type { Services } from '../services';
+import { useAuth } from '../store/auth';
+import { useConfirmDialog } from '../composables/useConfirmDialog';
 
 const services = inject<Services>('services');
 const auth = useAuth();
@@ -169,6 +193,28 @@ const newUser = ref({
   password: '',
   role: 'user',
 });
+
+const toast = ref<{ show: boolean; message: string; color: string }>({
+  show: false,
+  message: '',
+  color: 'info',
+});
+
+const { confirmDialog, openConfirm, cancelConfirm, executeConfirm } = useConfirmDialog();
+
+function showToast(message: string, color = 'info') {
+  toast.value = { show: true, message, color };
+}
+
+function getErrorMessage(error: unknown): string {
+  if (typeof error === 'object' && error !== null) {
+    const maybeResponse = (error as { response?: { data?: { message?: string } } }).response;
+    if (maybeResponse?.data?.message) return maybeResponse.data.message;
+    const maybeMessage = (error as { message?: string }).message;
+    if (maybeMessage) return maybeMessage;
+  }
+  return 'Unexpected error';
+}
 
 const loadUsers = async () => {
   const response = await services?.userService.findAll();
@@ -203,56 +249,72 @@ const loadAssignments = async () => {
 
 const createUser = async () => {
   try {
-    await services?.authService.register(newUser.value);
+    await services?.authService.register(
+      newUser.value.username,
+      newUser.value.password,
+    );
     showCreateUser.value = false;
     newUser.value = { username: '', password: '', role: 'user' };
     await loadUsers();
-    alert('User created successfully');
+    showToast('User created successfully!', 'success');
   } catch (error) {
     console.error('Error creating user:', error);
-    alert('Failed to create user');
+    showToast('Failed to create user: ' + getErrorMessage(error), 'error');
   }
 };
 
-const deleteUser = async (userId: number) => {
-  if (!confirm('Are you sure you want to delete this user?')) return;
-  
-  try {
-    await services?.userService.remove(userId);
-    await loadUsers();
-    alert('User deleted successfully');
-  } catch (error) {
-    console.error('Error deleting user:', error);
-    alert('Failed to delete user');
-  }
+const deleteUser = (userId: number) => {
+  const targetUser = users.value.find((u) => u.id === userId);
+  openConfirm({
+    title: 'Delete User',
+    message: `Are you sure you want to delete "${targetUser?.username ?? 'this user'}"?`,
+    confirmLabel: 'Delete',
+    confirmColor: 'error',
+    onConfirm: async () => {
+      try {
+        await services?.userService.remove(userId);
+        await loadUsers();
+        showToast('User deleted successfully!', 'success');
+      } catch (error) {
+        console.error('Error deleting user:', error);
+        showToast('Failed to delete user: ' + getErrorMessage(error), 'error');
+      }
+    },
+  });
 };
 
 const assignManager = async () => {
   if (!selectedUser.value || !selectedRoom.value) return;
-  
+
   try {
     await services?.roomService.assignManager(selectedUser.value, selectedRoom.value);
     selectedUser.value = null;
     selectedRoom.value = null;
     await loadAssignments();
-    alert('Manager assigned successfully');
+    showToast('Manager assigned successfully!', 'success');
   } catch (error) {
     console.error('Error assigning manager:', error);
-    alert('Failed to assign manager');
+    showToast('Failed to assign manager: ' + getErrorMessage(error), 'error');
   }
 };
 
-const removeManager = async (userId: number, roomId: number) => {
-  if (!confirm('Are you sure you want to remove this assignment?')) return;
-  
-  try {
-    await services?.roomService.removeManager(userId, roomId);
-    await loadAssignments();
-    alert('Manager removed successfully');
-  } catch (error) {
-    console.error('Error removing manager:', error);
-    alert('Failed to remove manager');
-  }
+const removeManager = (userId: number, roomId: number) => {
+  openConfirm({
+    title: 'Remove Manager',
+    message: 'Are you sure you want to remove this assignment?',
+    confirmLabel: 'Remove',
+    confirmColor: 'warning',
+    onConfirm: async () => {
+      try {
+        await services?.roomService.removeManager(userId, roomId);
+        await loadAssignments();
+        showToast('Manager removed successfully!', 'success');
+      } catch (error) {
+        console.error('Error removing manager:', error);
+        showToast('Failed to remove manager: ' + getErrorMessage(error), 'error');
+      }
+    },
+  });
 };
 
 const getUserName = (userId: number) => {

@@ -1,6 +1,6 @@
 <template>
   <v-app>
-    <v-app-bar elevation="4" class="app-header" v-if="notInRoom">
+    <v-app-bar elevation="4" class="app-header" v-if="showAppHeader">
       <v-app-bar-title class="app-title">
         <v-icon size="large" class="mr-2">mdi-cards</v-icon>
         <span class="title-text">Bingo Game</span>
@@ -187,7 +187,11 @@ const passwordRules = [
 ]
 
 // Computed
-const notInRoom = computed(() => {
+const showAppHeader = computed(() => {
+  if (route.name === 'admin-dashboard') {
+    return false
+  }
+
   const path = route.path || ''
 
   return (

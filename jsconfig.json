@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "baseUrl": ".",
+    "baseUrl": "./client",
     "paths": {
       "@/*": ["src/*"]
     },
@@ -12,12 +12,16 @@
     "skipLibCheck": true
   },
   "include": [
-    "src/**/*.ts",
-    "src/**/*.tsx",
-    "src/**/*.vue",
-    "src/**/*.d.ts"
+    "client/src/**/*.ts",
+    "client/src/**/*.tsx",
+    "client/src/**/*.vue"
   ],
-  "exclude": ["node_modules", "../src", "../dist", "../test"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src",
+    "test"
+  ],
   "vueCompilerOptions": {
     "target": 3
   }

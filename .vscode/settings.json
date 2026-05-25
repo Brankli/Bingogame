@@ -1,24 +1,15 @@
 {
-  "eslint.workingDirectories": ["client"],
   "typescript.tsdk": "client/node_modules/typescript/lib",
   "typescript.enablePromptUseWorkspaceTsdk": true,
   "vetur.config": {
-    "projects": [
-      {
-        "root": "./client",
-        "package": "./client/package.json",
-        "tsconfig": "./client/tsconfig.json",
-        "jsconfig": "./client/jsconfig.json"
-      }
-    ]
+    "projects": ["./client"]
   },
   "vetur.ignoreProjectWarning": true,
-  "vetur.validation.template": false,
+  "vetur.useWorkspaceDependencies": true,
   "vetur.validation.script": false,
+  "vetur.validation.template": false,
   "vetur.validation.style": false,
-  "volar.config.vueCompilerOptions": {},
-  "search.exclude": {
-    "**/node_modules": true,
-    "**/dist": true
-  }
+  "vetur.validation.interpolation": false,
+  "volar.config.typescript.tsdk": "client/node_modules/typescript/lib",
+  "vue.inlayHints.missingProps": false
 }
