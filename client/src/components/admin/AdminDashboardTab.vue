@@ -141,6 +141,7 @@ const {
   formatFee,
   joinRoom,
   rooms,
+  totalUserEarnings,
   totalUsers,
   user
 } = useAdminDashboard();

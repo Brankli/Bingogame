@@ -20,7 +20,9 @@ import { RoomManagerGuard } from './guards/room-manager.guard';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('SECRET_KEY') || 'electron-default-secret-key-change-in-production',
+        secret:
+          configService.get<string>('SECRET_KEY') ||
+          'electron-default-secret-key-change-in-production',
         signOptions: { expiresIn: '1y' },
       }),
       inject: [ConfigService],

@@ -1,0 +1,188 @@
+<template>
+<v-card class="users-card" elevation="4">
+            <v-card-title class="card-title">
+              <v-icon class="mr-2">mdi-account-multiple</v-icon>
+              User Management
+            </v-card-title>
+            <v-card-text>
+              <v-alert type="info" variant="tonal" class="mb-4">
+                <v-icon class="mr-2">mdi-account-group</v-icon>
+                {{ users.length }} users total | Total User Earnings: {{ formatFee(totalUserEarnings) }} Birr
+              </v-alert>
+
+              <v-table class="elevation-1 user-table" v-if="users.length > 0">
+                <thead>
+                  <tr>
+                    <th class="text-left">Username</th>
+                    <th class="text-left">Role</th>
+                    <th class="text-left">House Fee</th>
+                    <th class="text-left">Total Earnings</th>
+                    <th class="text-left">Created</th>
+                    <th class="text-left">Last Active</th>
+                    <th class="text-left">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="u in paginatedUsers" :key="u.id">
+                    <td>{{ u.username }}</td>
+                    <td>
+                      <div v-if="editingUserId === u.id">
+                        <v-select
+                          v-model="editForm.role"
+                          :items="roleOptions"
+                          item-title="title"
+                          item-value="value"
+                          density="compact"
+                          hide-details
+                          variant="outlined"
+                        />
+                      </div>
+                      <v-chip
+                        v-else
+                        :color="u.role === 'admin' ? 'error' : 'primary'"
+                        variant="elevated"
+                        size="small"
+                      >
+                        {{ String(u.role || '').toUpperCase() }}
+                      </v-chip>
+                    </td>
+                    <td>
+                      <div v-if="editingUserId === u.id" class="fee-editor">
+                        <v-text-field
+                          v-model.number="editForm.houseFee"
+                          type="number"
+                          density="compact"
+                          hide-details
+                          variant="outlined"
+                          min="0"
+                          step="0.01"
+                        />
+                      </div>
+                      <span v-else>{{ formatFee(u.houseFee) }} Birr</span>
+                    </td>
+                    <td>
+                      <v-chip color="success" size="small" v-if="u.role === 'user'">
+                        {{ formatFee(u.totalEarnings || 0) }} Birr
+                      </v-chip>
+                      <span v-else>-</span>
+                    </td>
+                    <td>
+                      <small>{{ formatDate(u.createdAt) }}</small>
+                    </td>
+                    <td>
+                      <small>{{ formatDate(u.lastActive) }}</small>
+                    </td>
+                    <td>
+                      <v-btn
+                        v-if="editingUserId !== u.id"
+                        color="primary"
+                        variant="text"
+                        size="small"
+                        @click="startEditUser(u)"
+                        title="Edit User"
+                      >
+                        <v-icon>mdi-pencil</v-icon>
+                      </v-btn>
+                      <v-btn
+                        v-if="editingUserId === u.id"
+                        color="success"
+                        variant="text"
+                        size="small"
+                        @click="saveUser(u.id)"
+                        title="Update User"
+                      >
+                        <v-icon>mdi-content-save</v-icon>
+                      </v-btn>
+                      <v-btn
+                        v-if="editingUserId === u.id"
+                        color="secondary"
+                        variant="text"
+                        size="small"
+                        @click="cancelEditUser"
+                        title="Cancel Edit"
+                      >
+                        <v-icon>mdi-close</v-icon>
+                      </v-btn>
+                      <v-btn
+                        v-if="u.role !== 'admin'"
+                        color="warning"
+                        variant="text"
+                        size="small"
+                        @click="makeAdmin(u.id)"
+                        title="Make Admin"
+                      >
+                        <v-icon>mdi-shield-crown</v-icon>
+                      </v-btn>
+                      <v-btn
+                        v-else
+                        color="info"
+                        variant="text"
+                        size="small"
+                        @click="removeAdmin(u.id)"
+                        title="Remove Admin"
+                      >
+                        <v-icon>mdi-shield-remove</v-icon>
+                      </v-btn>
+                      <v-btn
+                        color="error"
+                        variant="text"
+                        size="small"
+                        @click="deleteUser(u.id)"
+                        title="Delete User"
+                      >
+                        <v-icon>mdi-delete</v-icon>
+                      </v-btn>
+                    </td>
+                  </tr>
+                </tbody>
+              </v-table>
+
+              <!-- Users Pagination -->
+              <v-pagination
+                v-if="totalUsersPages > 1"
+                v-model="usersPage"
+                :length="totalUsersPages"
+                :total-visible="7"
+                class="mt-4"
+              ></v-pagination>
+
+              <v-alert v-if="users.length === 0" type="warning" variant="tonal" class="mt-4">
+                <v-icon class="mr-2">mdi-alert-circle</v-icon>
+                No users found.
+              </v-alert>
+            </v-card-text>
+          </v-card>
+</template>
+
+
+<script setup lang="ts">
+import { onMounted } from 'vue';
+import { useAdminDashboard } from '@/composables/useAdminDashboard';
+
+const {
+  cancelEditUser,
+  deleteUser,
+  editForm,
+  editingUserId,
+  formatDate,
+  formatFee,
+  loadUsers,
+  makeAdmin,
+  paginatedUsers,
+  removeAdmin,
+  roleOptions,
+  saveUser,
+  startEditUser,
+  totalUsersPages,
+  totalUserEarnings,
+  user,
+  users,
+  usersPage
+} = useAdminDashboard();
+
+// Load users when component mounts
+onMounted(() => {
+  console.log('[AdminUsersTab] Component mounted, loading users...');
+  loadUsers();
+});
+</script>

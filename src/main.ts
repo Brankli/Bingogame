@@ -20,8 +20,10 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe());
 
   // Only use Redis adapter if not in Electron environment
-  const isElectron = process.env.ELECTRON_MODE === 'true' || process.versions.hasOwnProperty('electron');
-  
+  const isElectron =
+    process.env.ELECTRON_MODE === 'true' ||
+    process.versions.hasOwnProperty('electron');
+
   if (!isElectron) {
     try {
       const redisIoAdapter = new RedisIoAdapter(app);
@@ -29,10 +31,15 @@ async function bootstrap() {
       app.useWebSocketAdapter(redisIoAdapter);
       console.log('✅ Redis adapter connected');
     } catch (error) {
-      console.warn('⚠️ Redis not available, using default adapter:', error.message);
+      console.warn(
+        '⚠️ Redis not available, using default adapter:',
+        error.message,
+      );
     }
   } else {
-    console.log('🖥️ Running in Electron mode - using default WebSocket adapter');
+    console.log(
+      '🖥️ Running in Electron mode - using default WebSocket adapter',
+    );
   }
 
   const port = Number(process.env.PORT) || 3000;

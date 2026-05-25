@@ -32,5 +32,8 @@ export function getCorsOrigins(): string[] | true {
   if (!corsOrigin) {
     return process.env.NODE_ENV === 'production' ? [] : true;
   }
-  return corsOrigin.split(',').map((o) => o.trim()).filter(Boolean);
+  return corsOrigin
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
 }

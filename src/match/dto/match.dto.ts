@@ -1,5 +1,5 @@
-import { mapToMatchNumberDto, MatchNumberDto } from "./match-number.dto";
-import { Match } from "../entities/match.entity";
+import { mapToMatchNumberDto, MatchNumberDto } from './match-number.dto';
+import { Match } from '../entities/match.entity';
 
 export class MatchDto {
   id: number;

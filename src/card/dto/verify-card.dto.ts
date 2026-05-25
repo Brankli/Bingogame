@@ -1,4 +1,4 @@
-import { IsString, IsArray, IsNumber } from 'class-validator';
+import { IsString, IsArray } from 'class-validator';
 
 export class VerifyCardDto {
   @IsString()

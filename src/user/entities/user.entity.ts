@@ -1,4 +1,11 @@
-import { BeforeInsert, Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  BeforeInsert,
+  BeforeUpdate,
+  Column,
+  Entity,
+  OneToMany,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
 import { Room } from '../../room/entities/room.entity';
 
 export enum UserRole {
@@ -44,6 +51,11 @@ export class User {
     if (!this.lastActive) {
       this.lastActive = now;
     }
+  }
+
+  @BeforeUpdate()
+  updateLastActive() {
+    this.lastActive = new Date();
   }
 
   @OneToMany(() => Room, (room) => room.owner)

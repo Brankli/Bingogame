@@ -68,7 +68,11 @@ export class SocketsGateway
   }
 
   private async ensureCanManageRoom(user: User, roomId: number): Promise<void> {
-    const canManage = await this.roomService.canManageRoom(user.id, roomId, user.role);
+    const canManage = await this.roomService.canManageRoom(
+      user.id,
+      roomId,
+      user.role,
+    );
     if (!canManage) {
       throw new WsException('Forbidden: insufficient room permissions');
     }
@@ -115,36 +119,47 @@ export class SocketsGateway
     @MessageBody('registeredCards') registeredCards?: string[],
   ): Promise<void> {
     try {
-      this.logger.log(`[SocketGateway] ========== NEW MATCH REQUEST ==========`);
+      this.logger.log(
+        `[SocketGateway] ========== NEW MATCH REQUEST ==========`,
+      );
       this.logger.log(`[SocketGateway] Room ID: ${roomId}`);
       this.logger.log(`[SocketGateway] Sold Cards: ${soldCards}`);
       this.logger.log(`[SocketGateway] House Fee: ${houseFeePerCard}`);
       this.logger.log(`[SocketGateway] Registered Cards:`, registeredCards);
-      
+
       const user = this.getAuthenticatedUser(client);
-      this.logger.log(`[SocketGateway] User: ${user.username} (ID: ${user.id})`);
-      
+      this.logger.log(
+        `[SocketGateway] User: ${user.username} (ID: ${user.id})`,
+      );
+
       await this.ensureCanManageRoom(user, roomId);
       this.logger.log(`[SocketGateway] ✅ User authorized to manage room`);
-      
+
       this.logger.log(`[SocketGateway] Closing existing matches...`);
       const room = await this.roomService.closeMatches(roomId);
       this.logger.log(`[SocketGateway] ✅ Existing matches closed`);
-      
+
       this.logger.log(`[SocketGateway] Starting new match...`);
-      await this.roomService.startMatch(room, { soldCards, registeredCards: registeredCards || [] });
+      await this.roomService.startMatch(room, {
+        soldCards,
+        registeredCards: registeredCards || [],
+      });
       this.logger.log(`[SocketGateway] ✅ Match started successfully`);
 
       // Calculate and add house fee earnings
       const feePerCard = houseFeePerCard || 2; // Default 2 Birr per card
       const totalHouseFee = soldCards * feePerCard;
-      
+
       // Add earnings to room owner (or the user who started the game)
       const roomOwnerId = room.owner?.id || user.id;
       await this.userService.addEarnings(roomOwnerId, totalHouseFee);
-      
-      this.logger.log(`[SocketGateway] ✅ Added ${totalHouseFee} Birr house fee to user ${roomOwnerId}`);
-      this.logger.log(`[SocketGateway] ========== NEW MATCH COMPLETE ==========`);
+
+      this.logger.log(
+        `[SocketGateway] ✅ Added ${totalHouseFee} Birr house fee to user ${roomOwnerId}`,
+      );
+      this.logger.log(
+        `[SocketGateway] ========== NEW MATCH COMPLETE ==========`,
+      );
     } catch (error) {
       this.logger.error(`[SocketGateway] ❌ ERROR in handleNewMatch:`, error);
       throw error;
@@ -194,7 +209,7 @@ export class SocketsGateway
     await this.ensureCanManageRoom(user, roomId);
     this.logger.log(`Changing speed for match ${matchId} to ${speed}ms`);
     this.matchService.changeSpeed(matchId, roomId, speed);
-    
+
     // Notify all clients in the room about speed change
     this.server.to(roomId.toString()).emit('speed-changed', {
       matchId,
@@ -208,7 +223,8 @@ export class SocketsGateway
     @ConnectedSocket() client: Socket,
     @MessageBody('matchId') matchId: number,
     @MessageBody('roomId') roomId: number,
-    @MessageBody('winners') winners?: Array<{ cardNumber?: string; username?: string }>,
+    @MessageBody('winners')
+    winners?: Array<{ cardNumber?: string; username?: string }>,
   ): Promise<void> {
     const user = this.getAuthenticatedUser(client);
     await this.ensureCanManageRoom(user, roomId);
@@ -238,8 +254,10 @@ export class SocketsGateway
     @MessageBody('pattern') pattern: string,
   ): Promise<void> {
     const user = this.getAuthenticatedUser(client);
-    this.logger.log(`Player ${user.username} claims BINGO with card ${cardNumber} in room ${roomId}`);
-    
+    this.logger.log(
+      `Player ${user.username} claims BINGO with card ${cardNumber} in room ${roomId}`,
+    );
+
     // Broadcast to all clients in the room that someone claimed BINGO
     this.server.to(roomId.toString()).emit(PLAYER_WON_EVENT, {
       username: user.username,
@@ -248,16 +266,16 @@ export class SocketsGateway
     });
   }
 
-  handleConnection(@ConnectedSocket() client: Socket, ...args: any[]): any {
+  handleConnection(@ConnectedSocket() client: Socket): any {
     this.logger.log(`Client is connected! ${client.id}`);
-    
+
     // Debug: Log all incoming events
     client.onAny((eventName, ...args) => {
       this.logger.log(`[Socket Event Received] ${eventName}`, args);
     });
   }
 
-  handleDisconnect(@ConnectedSocket() client: Socket, ...args: any[]): any {
+  handleDisconnect(@ConnectedSocket() client: Socket): any {
     this.logger.log(`Client is disconnected! ${client.id}`);
   }
 }

@@ -83,4 +83,29 @@ export class UserController {
     await this.userService.changePassword(user.id, body.newPassword);
     return { success: true, message: 'Password changed successfully' };
   }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Post('adjust-earnings')
+  async adjustEarnings(
+    @UserDecorator() admin,
+    @Body() body: { userId: number; amount: number; type: string; reason?: string },
+  ) {
+    const result = await this.userService.adjustEarnings(
+      body.userId,
+      body.amount,
+      body.type as any,
+      body.reason,
+      admin.username,
+    );
+    return result;
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Get(':id/earnings-history')
+  async getEarningsHistory(@Param('id') id: string) {
+    const history = await this.userService.getEarningsHistory(+id);
+    return { data: history };
+  }
 }

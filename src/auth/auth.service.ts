@@ -13,10 +13,13 @@ export class AuthService {
   ) {}
 
   async login(loginDto: LoginDto): Promise<{ user; accessToken }> {
-    const user = await this.validateUser(loginDto.username, loginDto.password)
+    const user = await this.validateUser(loginDto.username, loginDto.password);
     if (user === null) {
       return null;
     }
+
+    // Update last active timestamp
+    await this.userService.update(user.id, { lastActive: new Date() });
 
     const accessToken = this.jwtService.sign({
       sub: user.id,

@@ -44,11 +44,15 @@ export class WsGuard implements CanActivate {
           return resolve(true);
         }
 
-        this.logger.warn(`WS auth failed: user not found for socket ${client.id}`);
+        this.logger.warn(
+          `WS auth failed: user not found for socket ${client.id}`,
+        );
         return resolve(false);
       });
     } catch (error) {
-      this.logger.warn(`WS auth token verification failed for socket ${client.id}`);
+      this.logger.warn(
+        `WS auth token verification failed for socket ${client.id}`,
+      );
       return false;
     }
   }

@@ -1,4 +1,9 @@
-import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { RoomManager } from '../../room/entities/room-manager.entity';
@@ -34,7 +39,9 @@ export class RoomManagerGuard implements CanActivate {
     });
 
     if (!manager) {
-      throw new ForbiddenException('You are not authorized to manage this room');
+      throw new ForbiddenException(
+        'You are not authorized to manage this room',
+      );
     }
 
     return true;
