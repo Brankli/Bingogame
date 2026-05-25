@@ -6,7 +6,8 @@ import {
   Param,
   Delete,
   UseGuards,
-  Patch,
+  ParseIntPipe,
+  Query,
 } from '@nestjs/common';
 import { CardService } from './card.service';
 import { CreateCardDto } from './dto/create-card.dto';
@@ -16,43 +17,25 @@ import { LockCardDto } from './dto/lock-card.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('cards')
+@UseGuards(JwtAuthGuard)
 export class CardController {
   constructor(private readonly cardService: CardService) {}
 
-  @UseGuards(JwtAuthGuard)
   @Post()
   async create(@Body() createCardDto: CreateCardDto) {
     return this.cardService.create(createCardDto);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Post('bulk-generate')
   async generateBulk(@Body() body: { roomId?: number }) {
     return this.cardService.generateBulkCards(body.roomId);
   }
 
-  @Get()
-  async findAll() {
-    return this.cardService.findAll();
-  }
-
-  @Get('available')
-  async getAvailable() {
-    return this.cardService.getAvailableCards();
-  }
-
-  @Get(':identifier')
-  async findOne(@Param('identifier') identifier: string) {
-    return this.cardService.findOne(identifier);
-  }
-
-  @UseGuards(JwtAuthGuard)
   @Post('verify')
   async verify(@Body() verifyDto: VerifyCardDto) {
     return this.cardService.verify(verifyDto);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Post('assign')
   async assignCard(@Body() assignDto: AssignCardDto) {
     return this.cardService.assignCardToUser(
@@ -62,41 +45,55 @@ export class CardController {
     );
   }
 
-  @UseGuards(JwtAuthGuard)
   @Post('unassign/:cardNumber')
   async unassignCard(@Param('cardNumber') cardNumber: string) {
     return this.cardService.unassignCard(cardNumber);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Post('lock')
   async lockCard(@Body() lockDto: LockCardDto) {
     return this.cardService.lockCard(lockDto.cardNumber, lockDto.matchId);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Post('unlock-match/:matchId')
-  async unlockMatch(@Param('matchId') matchId: number) {
+  async unlockMatch(@Param('matchId', ParseIntPipe) matchId: number) {
     await this.cardService.unlockCardsForMatch(matchId);
     return { message: 'Cards unlocked' };
   }
 
   @Get('room/:roomId')
-  async findByRoom(@Param('roomId') roomId: number) {
-    return this.cardService.findByRoom(roomId);
+  async findByRoom(
+    @Param('roomId', ParseIntPipe) roomId: number,
+    @Query('summary') summary?: string,
+  ) {
+    return this.cardService.findByRoom(roomId, summary === 'true');
   }
 
   @Get('user/:userId/room/:roomId')
   async getUserCardsInRoom(
-    @Param('userId') userId: number,
-    @Param('roomId') roomId: number,
+    @Param('userId', ParseIntPipe) userId: number,
+    @Param('roomId', ParseIntPipe) roomId: number,
   ) {
     return this.cardService.getUserCardsInRoom(userId, roomId);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @Get('available')
+  async getAvailable() {
+    return this.cardService.getAvailableCards();
+  }
+
+  @Get()
+  async findAll() {
+    return this.cardService.findAll();
+  }
+
+  @Get(':identifier')
+  async findOne(@Param('identifier') identifier: string) {
+    return this.cardService.findOne(identifier);
+  }
+
   @Delete(':id')
-  async remove(@Param('id') id: number) {
+  async remove(@Param('id', ParseIntPipe) id: number) {
     return this.cardService.remove(id);
   }
 }

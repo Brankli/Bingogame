@@ -10,7 +10,17 @@ export class AdminBootstrapService implements OnModuleInit {
 
   async onModuleInit(): Promise<void> {
     const username = (process.env.ADMIN_USERNAME || 'admin').trim();
-    const password = process.env.ADMIN_PASSWORD || 'admin123';
+    const isProduction = process.env.NODE_ENV === 'production';
+    const password = process.env.ADMIN_PASSWORD;
+
+    if (isProduction && !password) {
+      this.logger.error(
+        'ADMIN_PASSWORD is required in production. Set ADMIN_PASSWORD before starting the server.',
+      );
+      throw new Error('ADMIN_PASSWORD is required in production');
+    }
+
+    const resolvedPassword = password || 'admin123';
 
     try {
       // Always ensure the configured username is an admin (useful for dev/seed scenarios).
@@ -37,7 +47,10 @@ export class AdminBootstrapService implements OnModuleInit {
         return;
       }
 
-      const created = await this.userService.create({ username, password });
+      const created = await this.userService.create({
+        username,
+        password: resolvedPassword,
+      });
       await this.userService.update(created.id, { role: UserRole.ADMIN });
 
       this.logger.warn(

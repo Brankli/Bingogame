@@ -22,11 +22,24 @@ import {
   PLAYER_JOINED_EVENT,
   PLAYER_WON_EVENT,
   RESET_MATCH_EVENT,
+  END_MATCH_EVENT,
 } from './consts/sockets.const';
 import { MatchService } from '../match/match.service';
 import { UserService } from '../user/user.service';
+import { getCorsOrigins } from '../config/startup.validation';
 
-@WebSocketGateway({ cors: { origin: '*' } })
+function socketCorsOrigin(): string | string[] | boolean {
+  const origins = getCorsOrigins();
+  if (origins === true) {
+    return true;
+  }
+  if (Array.isArray(origins) && origins.length > 0) {
+    return origins;
+  }
+  return process.env.NODE_ENV === 'production' ? false : true;
+}
+
+@WebSocketGateway({ cors: { origin: socketCorsOrigin(), credentials: true } })
 export class SocketsGateway
   implements OnGatewayConnection, OnGatewayDisconnect
 {
@@ -187,6 +200,20 @@ export class SocketsGateway
       matchId,
       speed,
     });
+  }
+
+  @UseGuards(WsGuard)
+  @SubscribeMessage(END_MATCH_EVENT)
+  async handleEndMatch(
+    @ConnectedSocket() client: Socket,
+    @MessageBody('matchId') matchId: number,
+    @MessageBody('roomId') roomId: number,
+    @MessageBody('winners') winners?: Array<{ cardNumber?: string; username?: string }>,
+  ): Promise<void> {
+    const user = this.getAuthenticatedUser(client);
+    await this.ensureCanManageRoom(user, roomId);
+    this.logger.log(`Match ${matchId} is ending in room ${roomId}`);
+    await this.matchService.endMatch(matchId, roomId, winners);
   }
 
   @UseGuards(WsGuard)

@@ -1,6 +1,7 @@
 import Api from "@/services/Api";
-import {User} from "../../../src/user/entities/user.entity";
-import {AxiosPromise} from "axios";
+import type { User } from '@/types/user';
+import type { EarningsTransaction } from '@/types/earnings';
+import { AxiosPromise } from 'axios';
 
 export class UserService extends Api {
     public findAll(): AxiosPromise<User[]> {
@@ -40,5 +41,18 @@ export class UserService extends Api {
             currentPassword,
             newPassword,
         });
+    }
+
+    public adjustEarnings(userId: number, amount: number, type: string, reason?: string): AxiosPromise<any> {
+        return this.httpClient.post(`/users/adjust-earnings`, {
+            userId,
+            amount,
+            type,
+            reason,
+        });
+    }
+
+    public getEarningsHistory(userId: number): AxiosPromise<{ data: EarningsTransaction[] } | EarningsTransaction[]> {
+        return this.httpClient.get(`/users/${userId}/earnings-history`);
     }
 }

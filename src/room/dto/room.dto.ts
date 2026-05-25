@@ -3,6 +3,7 @@ import { mapToMatchDto, MatchDto } from '../../match/dto/match.dto';
 import { mapToRoomPrizeDto, RoomPrizeDto } from './room-prize.dto';
 import { mapToUserDto, UserDto } from '../../user/dto/user.dto';
 import { RoomManager } from '../entities/room-manager.entity';
+import { RoomCardMode } from '../consts/room-card-mode.const';
 
 export class RoomManagerDto {
   id: number;
@@ -13,6 +14,7 @@ export class RoomManagerDto {
 export class RoomDto {
   id: number;
   name: string;
+  cardMode: RoomCardMode;
   createdAt: Date;
   ticketPrice: number;
   currentMatch: MatchDto;
@@ -36,6 +38,7 @@ export function mapToRoomDto(room: Room): RoomDto {
   return {
     id: room.id,
     name: room.name,
+    cardMode: room.cardMode || RoomCardMode.AUTOMATIC,
     createdAt: room.createdAt,
     ticketPrice: room.ticketPrice,
     currentMatch: room.currentMatch ? mapToMatchDto(room.currentMatch) : null,

@@ -1,9 +1,27 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Card } from './entities/card.entity';
 import { CreateCardDto } from './dto/create-card.dto';
 import { VerifyCardDto } from './dto/verify-card.dto';
+import { generateBingoCard } from './bingo-grid.util';
+import {
+  cardNumberLookupVariants,
+  normalizeRoomCardNumber,
+  parseRoomIdFromCardNumber,
+} from './card-number.util';
+import {
+  buildMarkedCells,
+  countMarkedNonFreeCells,
+  evaluatePatternWins,
+  normalizeCalledNumbers,
+  normalizeVerifyPattern,
+} from './card-verify.util';
 
 @Injectable()
 export class CardService {
@@ -14,57 +32,9 @@ export class CardService {
     private readonly cardRepository: Repository<Card>,
   ) {}
 
-  /**
-   * Generate a valid 5x5 Bingo card following B-I-N-G-O column rules
-   * B: 1-15, I: 16-30, N: 31-45, G: 46-60, O: 61-75
-   * Center cell [2][2] is FREE space (0)
-   * Uses seed for reproducible cards
-   */
+  /** @see generateBingoCard */
   generateCard(seed?: number): number[][] {
-    const grid: number[][] = [];
-    const columnRanges = [
-      [1, 15],   // B
-      [16, 30],  // I
-      [31, 45],  // N
-      [46, 60],  // G
-      [61, 75],  // O
-    ];
-
-    // Simple seeded random function for reproducible results
-    const seededRandom = (seed: number) => {
-      const x = Math.sin(seed++) * 10000;
-      return x - Math.floor(x);
-    };
-
-    let currentSeed = seed || Date.now();
-
-    for (let col = 0; col < 5; col++) {
-      const [min, max] = columnRanges[col];
-      const availableNumbers = Array.from(
-        { length: max - min + 1 },
-        (_, i) => min + i,
-      );
-
-      // Shuffle using seeded random
-      for (let i = availableNumbers.length - 1; i > 0; i--) {
-        const j = Math.floor(seededRandom(currentSeed++) * (i + 1));
-        [availableNumbers[i], availableNumbers[j]] = [availableNumbers[j], availableNumbers[i]];
-      }
-
-      const columnNumbers = availableNumbers.slice(0, 5).sort((a, b) => a - b);
-
-      for (let row = 0; row < 5; row++) {
-        if (!grid[row]) grid[row] = [];
-        // Center cell is FREE space
-        if (row === 2 && col === 2) {
-          grid[row][col] = 0; // 0 represents FREE
-        } else {
-          grid[row][col] = columnNumbers[row];
-        }
-      }
-    }
-
-    return grid;
+    return generateBingoCard(seed);
   }
 
   /**
@@ -90,33 +60,21 @@ export class CardService {
    * Generate 400 pre-registered cards with static grids
    * @param roomId - Room ID for generating room-specific cards
    */
+  /**
+   * @deprecated Use RoomService.generateCardsForExistingRoom(roomId) instead.
+   */
   async generateBulkCards(roomId?: number): Promise<Card[]> {
-    const cards: Card[] = [];
-    
-    for (let i = 1; i <= 400; i++) {
-      const cardNumber = roomId 
-        ? this.generateCardNumber(i, roomId)
-        : this.generateCardNumber(i);
-      
-      const existingCard = await this.cardRepository.findOne({
-        where: { cardNumber },
-      });
-
-      if (!existingCard) {
-        // Use card index as seed for reproducible cards
-        const grid = this.generateCard(i * 1000);
-        
-        const card = this.cardRepository.create({
-          cardNumber,
-          grid: JSON.stringify(grid), // Convert to JSON string
-          isActive: true,
-        });
-        cards.push(await this.cardRepository.save(card));
-      }
+    if (!roomId) {
+      this.logger.warn(
+        'generateBulkCards called without roomId — global bulk is deprecated',
+      );
+      return [];
     }
 
-    this.logger.log(`Generated ${cards.length} new cards${roomId ? ` for room ${roomId}` : ''}`);
-    return cards;
+    this.logger.warn(
+      `generateBulkCards(roomId) is deprecated — use room card generation API`,
+    );
+    return [];
   }
 
   /**
@@ -130,7 +88,7 @@ export class CardService {
       // Use timestamp + index as seed for unique but reproducible cards
       const seed = Date.now() + i * 1000;
       const grid = this.generateCard(seed);
-      
+
       const card = this.cardRepository.create({
         cardNumber: this.generateCardNumber(),
         grid: JSON.stringify(grid), // Convert to JSON string
@@ -164,7 +122,7 @@ export class CardService {
    */
   async findOne(identifier: string | number): Promise<Card | null> {
     let card: Card | null;
-    
+
     if (typeof identifier === 'number') {
       card = await this.cardRepository.findOne({
         where: { id: identifier },
@@ -176,14 +134,14 @@ export class CardService {
         relations: ['assignedUser', 'room', 'room.currentMatch'],
       });
     }
-    
+
     if (card) {
       return {
         ...card,
         grid: await this.normalizeCardGrid(card),
       } as unknown as Card;
     }
-    
+
     return null;
   }
 
@@ -197,7 +155,10 @@ export class CardService {
   private isValidGrid(grid: unknown): grid is number[][] {
     if (!Array.isArray(grid) || grid.length !== 5) return false;
     return grid.every(
-      (row) => Array.isArray(row) && row.length === 5 && row.every((n) => Number.isFinite(n)),
+      (row) =>
+        Array.isArray(row) &&
+        row.length === 5 &&
+        row.every((n) => Number.isFinite(n)),
     );
   }
 
@@ -217,8 +178,12 @@ export class CardService {
       // Fallback below repairs corrupted grid payloads.
     }
 
-    const fallbackGrid = this.generateCard(this.parseCardSeedFromNumber(card.cardNumber));
-    await this.cardRepository.update(card.id, { grid: JSON.stringify(fallbackGrid) });
+    const fallbackGrid = this.generateCard(
+      this.parseCardSeedFromNumber(card.cardNumber),
+    );
+    await this.cardRepository.update(card.id, {
+      grid: JSON.stringify(fallbackGrid),
+    });
     return fallbackGrid;
   }
 
@@ -271,7 +236,7 @@ export class CardService {
    */
   async lockCard(cardNumber: string, matchId: number): Promise<Card> {
     try {
-      const card = await this.findOne(cardNumber);
+      const card = await this.resolveCardForVerify(cardNumber);
       if (!card) {
         throw new NotFoundException(`Card ${cardNumber} not found`);
       }
@@ -281,7 +246,7 @@ export class CardService {
         lockedInMatch: { id: matchId } as any,
       });
 
-      return this.findOne(cardNumber);
+      return this.findOne(card.cardNumber);
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
@@ -348,51 +313,230 @@ export class CardService {
   private getPatternCoordinates(pattern: string): number[][][] {
     const patterns: { [key: string]: number[][][] } = {
       horizontal: [
-        [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4]], // Row 0
-        [[1, 0], [1, 1], [1, 2], [1, 3], [1, 4]], // Row 1
-        [[2, 0], [2, 1], [2, 2], [2, 3], [2, 4]], // Row 2
-        [[3, 0], [3, 1], [3, 2], [3, 3], [3, 4]], // Row 3
-        [[4, 0], [4, 1], [4, 2], [4, 3], [4, 4]], // Row 4
+        [
+          [0, 0],
+          [0, 1],
+          [0, 2],
+          [0, 3],
+          [0, 4],
+        ], // Row 0
+        [
+          [1, 0],
+          [1, 1],
+          [1, 2],
+          [1, 3],
+          [1, 4],
+        ], // Row 1
+        [
+          [2, 0],
+          [2, 1],
+          [2, 2],
+          [2, 3],
+          [2, 4],
+        ], // Row 2
+        [
+          [3, 0],
+          [3, 1],
+          [3, 2],
+          [3, 3],
+          [3, 4],
+        ], // Row 3
+        [
+          [4, 0],
+          [4, 1],
+          [4, 2],
+          [4, 3],
+          [4, 4],
+        ], // Row 4
       ],
       vertical: [
-        [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]], // Col 0
-        [[0, 1], [1, 1], [2, 1], [3, 1], [4, 1]], // Col 1
-        [[0, 2], [1, 2], [2, 2], [3, 2], [4, 2]], // Col 2
-        [[0, 3], [1, 3], [2, 3], [3, 3], [4, 3]], // Col 3
-        [[0, 4], [1, 4], [2, 4], [3, 4], [4, 4]], // Col 4
+        [
+          [0, 0],
+          [1, 0],
+          [2, 0],
+          [3, 0],
+          [4, 0],
+        ], // Col 0
+        [
+          [0, 1],
+          [1, 1],
+          [2, 1],
+          [3, 1],
+          [4, 1],
+        ], // Col 1
+        [
+          [0, 2],
+          [1, 2],
+          [2, 2],
+          [3, 2],
+          [4, 2],
+        ], // Col 2
+        [
+          [0, 3],
+          [1, 3],
+          [2, 3],
+          [3, 3],
+          [4, 3],
+        ], // Col 3
+        [
+          [0, 4],
+          [1, 4],
+          [2, 4],
+          [3, 4],
+          [4, 4],
+        ], // Col 4
       ],
       diagonal: [
-        [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]], // Top-left to bottom-right
-        [[0, 4], [1, 3], [2, 2], [3, 1], [4, 0]], // Top-right to bottom-left
+        [
+          [0, 0],
+          [1, 1],
+          [2, 2],
+          [3, 3],
+          [4, 4],
+        ], // Top-left to bottom-right
+        [
+          [0, 4],
+          [1, 3],
+          [2, 2],
+          [3, 1],
+          [4, 0],
+        ], // Top-right to bottom-left
       ],
       anyline: [
         // Any horizontal line
-        [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4]], // Row 0
-        [[1, 0], [1, 1], [1, 2], [1, 3], [1, 4]], // Row 1
-        [[2, 0], [2, 1], [2, 2], [2, 3], [2, 4]], // Row 2
-        [[3, 0], [3, 1], [3, 2], [3, 3], [3, 4]], // Row 3
-        [[4, 0], [4, 1], [4, 2], [4, 3], [4, 4]], // Row 4
+        [
+          [0, 0],
+          [0, 1],
+          [0, 2],
+          [0, 3],
+          [0, 4],
+        ], // Row 0
+        [
+          [1, 0],
+          [1, 1],
+          [1, 2],
+          [1, 3],
+          [1, 4],
+        ], // Row 1
+        [
+          [2, 0],
+          [2, 1],
+          [2, 2],
+          [2, 3],
+          [2, 4],
+        ], // Row 2
+        [
+          [3, 0],
+          [3, 1],
+          [3, 2],
+          [3, 3],
+          [3, 4],
+        ], // Row 3
+        [
+          [4, 0],
+          [4, 1],
+          [4, 2],
+          [4, 3],
+          [4, 4],
+        ], // Row 4
         // Any vertical line
-        [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]], // Col 0
-        [[0, 1], [1, 1], [2, 1], [3, 1], [4, 1]], // Col 1
-        [[0, 2], [1, 2], [2, 2], [3, 2], [4, 2]], // Col 2
-        [[0, 3], [1, 3], [2, 3], [3, 3], [4, 3]], // Col 3
-        [[0, 4], [1, 4], [2, 4], [3, 4], [4, 4]], // Col 4
+        [
+          [0, 0],
+          [1, 0],
+          [2, 0],
+          [3, 0],
+          [4, 0],
+        ], // Col 0
+        [
+          [0, 1],
+          [1, 1],
+          [2, 1],
+          [3, 1],
+          [4, 1],
+        ], // Col 1
+        [
+          [0, 2],
+          [1, 2],
+          [2, 2],
+          [3, 2],
+          [4, 2],
+        ], // Col 2
+        [
+          [0, 3],
+          [1, 3],
+          [2, 3],
+          [3, 3],
+          [4, 3],
+        ], // Col 3
+        [
+          [0, 4],
+          [1, 4],
+          [2, 4],
+          [3, 4],
+          [4, 4],
+        ], // Col 4
         // Any diagonal line
-        [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]], // Top-left to bottom-right
-        [[0, 4], [1, 3], [2, 2], [3, 1], [4, 0]], // Top-right to bottom-left
+        [
+          [0, 0],
+          [1, 1],
+          [2, 2],
+          [3, 3],
+          [4, 4],
+        ], // Top-left to bottom-right
+        [
+          [0, 4],
+          [1, 3],
+          [2, 2],
+          [3, 1],
+          [4, 0],
+        ], // Top-right to bottom-left
       ],
       corners: [
-        [[0, 0], [0, 4], [4, 0], [4, 4]], // Four corners
+        [
+          [0, 0],
+          [0, 4],
+          [4, 0],
+          [4, 4],
+        ], // Four corners
       ],
       x: [
-        [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [0, 4], [1, 3], [3, 1], [4, 0]], // X shape
+        [
+          [0, 0],
+          [1, 1],
+          [2, 2],
+          [3, 3],
+          [4, 4],
+          [0, 4],
+          [1, 3],
+          [3, 1],
+          [4, 0],
+        ], // X shape
       ],
       t: [
-        [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4], [1, 2], [2, 2], [3, 2], [4, 2]], // T shape
+        [
+          [0, 0],
+          [0, 1],
+          [0, 2],
+          [0, 3],
+          [0, 4],
+          [1, 2],
+          [2, 2],
+          [3, 2],
+          [4, 2],
+        ], // T shape
       ],
       l: [
-        [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0], [4, 1], [4, 2], [4, 3], [4, 4]], // L shape
+        [
+          [0, 0],
+          [1, 0],
+          [2, 0],
+          [3, 0],
+          [4, 0],
+          [4, 1],
+          [4, 2],
+          [4, 3],
+          [4, 4],
+        ], // L shape
       ],
       fullhouse: [
         // All 25 cells
@@ -400,13 +544,68 @@ export class CardService {
       ],
     };
 
-    return patterns[pattern.toLowerCase()] || [];
+    return patterns[normalizeVerifyPattern(pattern)] || [];
+  }
+
+  private async resolveCardForVerify(rawCardNumber: string): Promise<Card | null> {
+    const trimmed = String(rawCardNumber || '').trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const roomId = parseRoomIdFromCardNumber(trimmed);
+    const variants = cardNumberLookupVariants(trimmed, roomId ?? undefined);
+
+    for (const key of variants) {
+      const card = await this.findOne(key);
+      if (card) {
+        return card;
+      }
+    }
+
+    return null;
+  }
+
+  private isCardRegisteredForMatch(
+    card: Card,
+    inputCardNumber: string,
+    registeredCards: string[],
+  ): boolean {
+    if (!registeredCards?.length || !card.room?.id) {
+      return false;
+    }
+
+    const registeredSet = new Set(
+      registeredCards.map((c) => String(c || '').trim().toUpperCase()),
+    );
+
+    const candidates = new Set<string>();
+    candidates.add(String(card.cardNumber || '').trim().toUpperCase());
+
+    const normalized = normalizeRoomCardNumber(inputCardNumber, card.room.id);
+    if (normalized) {
+      candidates.add(normalized.toUpperCase());
+    }
+
+    for (const variant of cardNumberLookupVariants(
+      inputCardNumber,
+      card.room.id,
+    )) {
+      candidates.add(variant.toUpperCase());
+    }
+
+    for (const candidate of candidates) {
+      if (registeredSet.has(candidate)) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   /**
    * Verify if a card wins with given pattern
-   * NOW INCLUDES: Verification that the winning pattern was completed on the LAST called number
-   * AND: Verification that the card is registered for the current match
+   * Includes: last-called-number rule, match registration, normalized card lookup
    */
   async verify(verifyDto: VerifyCardDto): Promise<{
     isValid: boolean;
@@ -421,44 +620,58 @@ export class CardService {
     unregistered?: boolean; // NEW: Flag for unregistered cards
     lateClaim?: boolean; // NEW: Flag for late claims (pattern completed earlier)
   }> {
-    const card = await this.findOne(verifyDto.cardNumber);
+    const card = await this.resolveCardForVerify(verifyDto.cardNumber);
+    const canonicalCardNumber = card?.cardNumber ?? verifyDto.cardNumber;
 
     if (!card) {
-      this.logger.warn(`Verification failed: Card ${verifyDto.cardNumber} not found`);
+      this.logger.warn(
+        `Verification failed: Card ${verifyDto.cardNumber} not found`,
+      );
       return {
         isValid: false,
         message: 'Card not found',
       };
     }
 
-    // Check if card is registered for the current match
-    try {
-      const room = card.room;
-      if (room?.currentMatch) {
-        const registeredCards = room.currentMatch.registeredCards || [];
-        const isRegistered = registeredCards.includes(verifyDto.cardNumber);
-        
-        if (!isRegistered) {
-          this.logger.warn(`Verification BLOCKED: Card ${verifyDto.cardNumber} is NOT registered for this match`);
-          this.logger.warn(`Registered cards: ${registeredCards.join(', ')}`);
-          return {
-            isValid: false,
-            message: `Card ${verifyDto.cardNumber} was not registered for this game. Only registered cards can win.`,
-            unregistered: true,
-          };
-        }
-        
-        this.logger.log(`✅ Card ${verifyDto.cardNumber} is registered for this match`);
-      } else {
-        this.logger.warn(`⚠️ No current match found for room, skipping registration check`);
+    const room = card.room;
+    if (room?.currentMatch) {
+      const registeredCards = room.currentMatch.registeredCards || [];
+      const isRegistered = this.isCardRegisteredForMatch(
+        card,
+        verifyDto.cardNumber,
+        registeredCards,
+      );
+
+      if (!isRegistered) {
+        this.logger.warn(
+          `Verification BLOCKED: Card ${canonicalCardNumber} is NOT registered for this match`,
+        );
+        this.logger.warn(`Registered cards: ${registeredCards.join(', ')}`);
+        return {
+          isValid: false,
+          message: `Card ${canonicalCardNumber} was not registered for this game. Only registered cards can win.`,
+          unregistered: true,
+        };
       }
-    } catch (error) {
-      this.logger.error(`Error checking card registration:`, error);
-      // Continue with verification if registration check fails
+
+      this.logger.log(
+        `✅ Card ${canonicalCardNumber} is registered for this match`,
+      );
+    } else {
+      this.logger.warn(
+        `Verification BLOCKED: No active match in room for card ${canonicalCardNumber}`,
+      );
+      return {
+        isValid: false,
+        message:
+          'No active game in this room. Start a match before verifying cards.',
+      };
     }
 
     if (card.isLocked) {
-      this.logger.warn(`Verification failed: Card ${verifyDto.cardNumber} is locked`);
+      this.logger.warn(
+        `Verification failed: Card ${verifyDto.cardNumber} is locked`,
+      );
       return {
         isValid: false,
         message: 'Card is locked due to previous wrong claim',
@@ -466,66 +679,57 @@ export class CardService {
       };
     }
 
-    const grid = (Array.isArray(card.grid)
-      ? card.grid
-      : await this.normalizeCardGrid(card)) as number[][];
-    const calledNumbers = Array.isArray(verifyDto.calledNumbers)
-      ? verifyDto.calledNumbers.filter((n) => Number.isFinite(n))
-      : [];
-    const pattern = String(verifyDto.pattern || '').toLowerCase();
+    const grid = (
+      Array.isArray(card.grid) ? card.grid : await this.normalizeCardGrid(card)
+    ) as number[][];
+    const calledNumbers = normalizeCalledNumbers(verifyDto.calledNumbers);
+    const pattern = normalizeVerifyPattern(verifyDto.pattern);
 
-    this.logger.log(`Verifying card ${verifyDto.cardNumber} with pattern: ${pattern}`);
-    this.logger.log(`Called numbers (${calledNumbers.length}): ${calledNumbers.join(', ')}`);
-    this.logger.log(`Card grid: ${JSON.stringify(grid)}`);
-
-    // Get the last called number
-    const lastCalledNumber = calledNumbers.length > 0 ? calledNumbers[calledNumbers.length - 1] : null;
-    this.logger.log(`Last called number: ${lastCalledNumber}`);
-
-    // Create marked cells matrix
-    const markedCells: boolean[][] = grid.map((row) =>
-      row.map((num) => num === 0 || calledNumbers.includes(num)),
+    this.logger.log(
+      `Verifying card ${canonicalCardNumber} with pattern: ${pattern}`,
+    );
+    this.logger.log(
+      `Called numbers (${calledNumbers.length}): ${calledNumbers.join(', ')}`,
     );
 
-    this.logger.log(`Marked cells: ${JSON.stringify(markedCells)}`);
+    const lastCalledNumber =
+      calledNumbers.length > 0 ? calledNumbers[calledNumbers.length - 1] : null;
+    this.logger.log(`Last called number: ${lastCalledNumber}`);
 
-    // Special Rule: If 12 or more numbers have been called and card has ZERO marked numbers (excluding FREE space)
-    // then the card automatically wins regardless of pattern
+    const markedCells = buildMarkedCells(grid, calledNumbers);
+
+    if (calledNumbers.length === 0) {
+      return {
+        isValid: false,
+        markedCells,
+        message: 'No numbers have been called yet',
+      };
+    }
+
+    // Special Rule: 12+ calls and zero marked non-free cells = unlucky winner
     if (calledNumbers.length >= 12) {
-      // Count marked cells (excluding FREE space at [2,2])
-      let markedCount = 0;
-      for (let row = 0; row < 5; row++) {
-        for (let col = 0; col < 5; col++) {
-          // Skip FREE space
-          if (row === 2 && col === 2) continue;
-          
-          const cellValue = grid[row][col];
-          if (cellValue !== 0 && calledNumbers.includes(cellValue)) {
-            markedCount++;
-          }
-        }
-      }
-
-      // If zero numbers are marked (unlucky card), it wins!
+      const markedCount = countMarkedNonFreeCells(grid, calledNumbers);
       if (markedCount === 0) {
-        this.logger.log(`Special win! Card ${verifyDto.cardNumber} has zero marked numbers`);
+        this.logger.log(
+          `Special win! Card ${canonicalCardNumber} has zero marked numbers`,
+        );
         return {
           isValid: true,
-          winningPattern: [[2, 2]], // Just highlight the FREE space
+          winningPattern: [[2, 2]],
           winningPatterns: [[[2, 2]]],
           patternNames: ['Special Win'],
           markedCells,
-          message: 'Special win! No numbers marked after 12 calls - Unlucky Winner!',
+          message:
+            'Special win! No numbers marked after 12 calls - Unlucky Winner!',
           specialWin: true,
           lastCalledNumber: lastCalledNumber || 0,
         };
       }
     }
 
-    // Get pattern coordinates
     const patternOptions = this.getPatternCoordinates(pattern);
     if (!patternOptions.length) {
-      this.logger.warn(`Unsupported pattern: ${pattern}`);
+      this.logger.warn(`Unsupported pattern: ${verifyDto.pattern}`);
       return {
         isValid: false,
         markedCells,
@@ -533,80 +737,50 @@ export class CardService {
       };
     }
 
-    this.logger.log(`Pattern options for ${pattern}: ${JSON.stringify(patternOptions)}`);
+    const { validNow, validNowNames, lateOnly, lateOnlyNames } =
+      evaluatePatternWins(
+        grid,
+        markedCells,
+        patternOptions,
+        lastCalledNumber,
+        (index) => this.getPatternName(pattern, index),
+      );
 
-    // NEW: Collect ALL matching patterns and check if they were completed on the last called number
-    const allMatchingPatterns: number[][][] = [];
-    const allPatternNames: string[] = [];
-    let winCompletedOnLastNumber = false;
-
-    // Check if any pattern option matches
-    for (let i = 0; i < patternOptions.length; i++) {
-      const patternCoords = patternOptions[i];
-      const allMarked = patternCoords.every(([row, col]) => {
-        if (
-          !Number.isInteger(row) ||
-          !Number.isInteger(col) ||
-          row < 0 ||
-          row >= 5 ||
-          col < 0 ||
-          col >= 5
-        ) {
-          return false;
-        }
-        const isMarked = Boolean(markedCells[row]?.[col]);
-        this.logger.debug(`Checking cell [${row},${col}] (value: ${grid[row][col]}): ${isMarked ? 'MARKED' : 'NOT MARKED'}`);
-        return isMarked;
-      });
-
-      if (allMarked) {
-        // Check if this pattern was completed by the last called number
-        const patternContainsLastNumber = patternCoords.some(([row, col]) => {
-          const cellValue = grid[row][col];
-          return cellValue === lastCalledNumber;
-        });
-
-        if (patternContainsLastNumber) {
-          winCompletedOnLastNumber = true;
-        }
-
-        allMatchingPatterns.push(patternCoords);
-        // Generate pattern name based on type
-        const patternName = this.getPatternName(pattern, i, patternOptions.length);
-        allPatternNames.push(patternName);
-        this.logger.log(`✅ Found matching pattern: ${patternName} (completed on last number: ${patternContainsLastNumber})`);
-      }
-    }
-
-    // If we found at least one matching pattern
-    if (allMatchingPatterns.length > 0) {
-      // NEW: Check if the win was completed on the last called number
-      if (!winCompletedOnLastNumber && lastCalledNumber !== null) {
-        this.logger.warn(`❌ Card ${verifyDto.cardNumber} has winning pattern(s) but they were NOT completed on the last called number (${lastCalledNumber})`);
-        return {
-          isValid: false,
-          winningPattern: allMatchingPatterns[0], // Include pattern for display
-          winningPatterns: allMatchingPatterns, // Include all patterns for display
-          patternNames: allPatternNames, // Include pattern names for display
-          markedCells,
-          message: `Pattern was completed earlier, not on the current number (${lastCalledNumber}). You must call BINGO immediately when you win!`,
-          lateClaim: true, // Flag to indicate this is a late claim
-        };
-      }
-
-      this.logger.log(`✅ Valid ${pattern} win for card ${verifyDto.cardNumber}! Found ${allMatchingPatterns.length} matching pattern(s) completed on number ${lastCalledNumber}`);
+    if (validNow.length > 0) {
+      this.logger.log(
+        `✅ Valid ${pattern} win for card ${canonicalCardNumber} on number ${lastCalledNumber}`,
+      );
       return {
         isValid: true,
-        winningPattern: allMatchingPatterns[0], // Keep first pattern for backward compatibility
-        winningPatterns: allMatchingPatterns, // NEW: All matching patterns
-        patternNames: allPatternNames, // NEW: Names of all patterns
+        winningPattern: validNow[0],
+        winningPatterns: validNow,
+        patternNames: validNowNames,
         markedCells,
-        message: `Valid ${pattern} win! (${allMatchingPatterns.length} pattern${allMatchingPatterns.length > 1 ? 's' : ''} matched on number ${lastCalledNumber})`,
+        message: `Valid ${pattern} win! (${validNow.length} pattern${
+          validNow.length > 1 ? 's' : ''
+        } matched on number ${lastCalledNumber})`,
         lastCalledNumber: lastCalledNumber || 0,
       };
     }
 
-    this.logger.warn(`❌ No valid ${pattern} pattern found for card ${verifyDto.cardNumber}`);
+    if (lateOnly.length > 0) {
+      this.logger.warn(
+        `❌ Card ${canonicalCardNumber} completed pattern before last call (${lastCalledNumber})`,
+      );
+      return {
+        isValid: false,
+        winningPattern: lateOnly[0],
+        winningPatterns: lateOnly,
+        patternNames: lateOnlyNames,
+        markedCells,
+        message: `Pattern was completed earlier, not on the current number (${lastCalledNumber}). You must call BINGO immediately when you win!`,
+        lateClaim: true,
+      };
+    }
+
+    this.logger.warn(
+      `❌ No valid ${pattern} pattern found for card ${canonicalCardNumber}`,
+    );
     return {
       isValid: false,
       markedCells,
@@ -617,7 +791,7 @@ export class CardService {
   /**
    * Get human-readable pattern name
    */
-  private getPatternName(pattern: string, index: number, total: number): string {
+  private getPatternName(pattern: string, index: number): string {
     switch (pattern) {
       case 'horizontal':
         return `Horizontal Row ${index + 1}`;

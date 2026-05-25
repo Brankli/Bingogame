@@ -1,7 +1,5 @@
-import { CacheModule, forwardRef, Module } from '@nestjs/common';
-import { BullModule } from '@nestjs/bull';
+import { forwardRef, Module } from '@nestjs/common';
 import { MatchService } from './match.service';
-import { MatchesConsumer } from './consumers/matches.consumer';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Match } from './entities/match.entity';
 import { MatchNumber } from './entities/match-number.entity';
@@ -12,14 +10,11 @@ import { CardModule } from '../card/card.module';
 @Module({
   imports: [
     TypeOrmModule.forFeature([Match, MatchNumber]),
-    BullModule.registerQueue({
-      name: 'matches',
-    }),
     forwardRef(() => RoomModule),
     SocketsModule,
     forwardRef(() => CardModule),
   ],
-  providers: [MatchService, MatchesConsumer],
+  providers: [MatchService],
   exports: [MatchService],
 })
 export class MatchModule {}

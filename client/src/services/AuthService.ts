@@ -1,6 +1,6 @@
 import Api from "@/services/Api";
 import {AxiosPromise} from "axios";
-import {User} from "../../../src/user/entities/user.entity";
+import type { User } from '@/types/user';
 
 export class AuthService extends Api {
     async login(username: string, password: string): AxiosPromise<{ access_token }> {

@@ -1,0 +1,86 @@
+import { ConfigService } from '@nestjs/config';
+import { TypeOrmModuleOptions } from '@nestjs/typeorm';
+import { Room } from '../room/entities/room.entity';
+import { RoomPrize } from '../room/entities/room-prize.entity';
+import { RoomManager } from '../room/entities/room-manager.entity';
+import { User } from '../user/entities/user.entity';
+import { Match } from '../match/entities/match.entity';
+import { MatchNumber } from '../match/entities/match-number.entity';
+import { Card } from '../card/entities/card.entity';
+import { EarningsTransaction } from '../user/entities/earnings-transaction.entity';
+
+const ENTITIES = [
+  Room,
+  RoomPrize,
+  RoomManager,
+  User,
+  Match,
+  MatchNumber,
+  Card,
+  EarningsTransaction,
+];
+
+export function buildTypeOrmConfig(
+  configService: ConfigService,
+  isElectron: boolean,
+): TypeOrmModuleOptions {
+  const synchronize = process.env.NODE_ENV !== 'production';
+
+  if (isElectron) {
+    const os = require('os');
+    const path = require('path');
+    const fs = require('fs');
+    const dbPath = path.join(os.homedir(), '.bingo', 'bingo.db');
+    const dbDir = path.dirname(dbPath);
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir, { recursive: true });
+    }
+    return {
+      type: 'sqljs',
+      location: dbPath,
+      autoSave: true,
+      entities: ENTITIES,
+      synchronize,
+    };
+  }
+
+  const dbType = (
+    configService.get<string>('DB_TYPE') ||
+    (Number(configService.get('DB_PORT')) === 3306 ? 'mysql' : 'postgres')
+  ).toLowerCase();
+
+  const host = configService.get<string>('DB_HOST') || '127.0.0.1';
+  const port =
+    Number(configService.get('DB_PORT')) || (dbType === 'mysql' ? 3306 : 5432);
+  const username = configService.get<string>('DB_USER');
+  const password = configService.get<string>('DB_PASS');
+  const database = configService.get<string>('DB_NAME');
+
+  if (dbType === 'mysql') {
+    return {
+      type: 'mysql',
+      host,
+      port,
+      username,
+      password,
+      database,
+      entities: ENTITIES,
+      synchronize,
+    };
+  }
+
+  return {
+    type: 'postgres',
+    host,
+    port,
+    username,
+    password,
+    database,
+    entities: ENTITIES,
+    synchronize,
+    ssl:
+      process.env.NODE_ENV === 'production'
+        ? { rejectUnauthorized: false }
+        : false,
+  };
+}

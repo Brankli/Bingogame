@@ -1,14 +1,64 @@
 import Api from "@/services/Api";
-import {Room} from "../../../src/room/entities/room.entity";
-import {AxiosPromise} from "axios";
+import type { Room } from '@/types/room';
+import type { RoomCardMode } from '@/types/room';
+import type {
+  RoomCardPreview,
+  RoomCardStatus,
+  RoomCardGenerationResult,
+  RoomCreateResponse,
+  StaticCardLibraryStatus,
+  StaticCardLibraryGenerateResult,
+} from '@/types/roomCards';
+import { AxiosPromise } from 'axios';
 
 export default class RoomService extends Api {
     public index(): AxiosPromise<Room[]> {
         return this.httpClient.get<Room[]>('/rooms');
     }
 
-    public create(name: string): AxiosPromise<Room> {
-        return this.httpClient.post<Room>(`/rooms`, { name });
+    public create(
+        name: string,
+        cardMode: RoomCardMode = 'automatic',
+    ): AxiosPromise<RoomCreateResponse> {
+        return this.httpClient.post<RoomCreateResponse>(`/rooms`, { name, cardMode });
+    }
+
+    public getStaticCardLibraryStatus(): AxiosPromise<StaticCardLibraryStatus> {
+        return this.httpClient.get<StaticCardLibraryStatus>(
+            '/rooms/static-card-library/status',
+        );
+    }
+
+    public generateStaticCardLibrary(
+        reset = false,
+    ): AxiosPromise<StaticCardLibraryGenerateResult> {
+        return this.httpClient.post<StaticCardLibraryGenerateResult>(
+            '/rooms/static-card-library/generate',
+            { reset },
+        );
+    }
+
+    public getRoomCardStatus(roomId: number): AxiosPromise<RoomCardStatus> {
+        return this.httpClient.get<RoomCardStatus>(`/rooms/${roomId}/card-status`);
+    }
+
+    public previewRoomCard(roomId: number, index = 1): AxiosPromise<RoomCardPreview> {
+        return this.httpClient.get<RoomCardPreview>(`/rooms/${roomId}/cards/preview`, {
+            params: { index },
+        });
+    }
+
+    public async exportRoomCards(roomId: number): Promise<void> {
+        const response = await this.httpClient.get(`/rooms/${roomId}/cards/export`, {
+            responseType: 'blob',
+        });
+        const blob = new Blob([response.data], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `room-${roomId}-cards.csv`;
+        link.click();
+        window.URL.revokeObjectURL(url);
     }
 
     public show(roomId: number): AxiosPromise<Room> {
@@ -51,11 +101,17 @@ export default class RoomService extends Api {
         return this.httpClient.post('/rooms/cleanup-invalid-managers');
     }
 
-    public generateCardsForRoom(roomId: number): AxiosPromise<{ success: boolean; message: string; generated: number }> {
-        return this.httpClient.post(`/rooms/${roomId}/generate-cards`);
+    public generateCardsForRoom(
+        roomId: number,
+        options: { reset?: boolean } = {},
+    ): AxiosPromise<RoomCardGenerationResult & { success: boolean }> {
+        return this.httpClient.post(`/rooms/${roomId}/generate-cards`, options);
     }
 
-    public copyCardsFromRoom(targetRoomId: number, sourceRoomId: number): AxiosPromise<{ success: boolean; message: string; copied: number }> {
+    public copyCardsFromRoom(
+        targetRoomId: number,
+        sourceRoomId: number,
+    ): AxiosPromise<{ success: boolean; message: string; copied: number; total: number }> {
         return this.httpClient.post(`/rooms/${targetRoomId}/copy-cards`, { sourceRoomId });
     }
 }

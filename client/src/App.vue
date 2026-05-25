@@ -255,6 +255,9 @@ async function login() {
     // Set user in auth store
     auth.setUser(loginResponse.data.user)
 
+    const { getApiUrl } = await import('@/utils/apiUrl')
+    socket.connect(getApiUrl(), token.value)
+
     // Clear form
     username.value = ''
     password.value = ''
@@ -299,6 +302,7 @@ async function logout() {
   
   // Clear user from auth store (this also clears localStorage)
   auth.logout();
+  socket.disconnect();
 
   token.value = '';
   

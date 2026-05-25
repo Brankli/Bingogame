@@ -135,10 +135,10 @@ export const TOAST_MESSAGES: Record<string, ToastMessage> = {
 };
 
 class ToastAudioService {
-  private currentLanguage: string = 'en';
+  private currentLanguage = 'en';
   private audioCache: Map<string, HTMLAudioElement> = new Map();
-  private volume: number = 0.7;
-  private enabled: boolean = true;
+  private volume = 0.7;
+  private enabled = true;
 
   constructor() {
     // Load language from localStorage

@@ -1,5 +1,6 @@
 import axios, {AxiosInstance} from "axios";
 import { getApiUrl } from '@/utils/apiUrl';
+import { devLog, devWarn } from '@/utils/devLog';
 
 export default class Api {
     protected httpClient: AxiosInstance;
@@ -23,9 +24,9 @@ export default class Api {
                 
                 if (token) {
                     config.headers.Authorization = `Bearer ${token}`;
-                    console.log('🔑 Token added to request');
+                    devLog('🔑 Token added to request');
                 } else {
-                    console.warn('⚠️ No token found in localStorage');
+                    devWarn('⚠️ No token found in localStorage');
                 }
                 
                 // Always return config - don't reject if no token

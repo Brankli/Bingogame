@@ -11,4 +11,6 @@ export const BINGO_ONE_STARTED_EVENT = 'bingo-one-started';
 export const MATCH_PAUSED_EVENT = 'match-paused';
 export const MATCH_RESET_EVENT = 'match-reset';
 export const RESET_MATCH_EVENT = 'reset-match';
+export const END_MATCH_EVENT = 'end-match';
+export const MATCH_ENDED_EVENT = 'match-ended';
 export const PLAYER_WON_EVENT = 'player-won';

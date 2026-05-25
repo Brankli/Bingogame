@@ -5,8 +5,6 @@ import {
   Injectable,
   Logger,
 } from '@nestjs/common';
-import { InjectQueue } from '@nestjs/bull';
-import { Queue } from 'bull';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Match } from './entities/match.entity';
 import { Repository } from 'typeorm';
@@ -20,6 +18,7 @@ import { CardService } from '../card/card.service';
 import {
   BINGO_ONE_STARTED_EVENT,
   EXTRACTED_NUMBERS_EVENT,
+  MATCH_ENDED_EVENT,
   MATCH_PAUSED_EVENT,
   MATCH_RESET_EVENT,
 } from '../sockets/consts/sockets.const';
@@ -39,12 +38,10 @@ export class MatchService {
   private readonly logger: Logger = new Logger('MatchService');
   private matchTimers: Map<number, NodeJS.Timeout> = new Map();
   private matchSpeeds: Map<number, number> = new Map(); // Store speed per match
+  private matchRoomIds: Map<number, number> = new Map();
   private readonly matchNumbersCachePrefix = EXTRACTED_NUMBERS_CACHE_PREFIX;
 
   constructor(
-    @InjectQueue('matches')
-    private readonly matchesQueue: Queue,
-
     @InjectRepository(Match)
     private readonly matchRepository: Repository<Match>,
 
@@ -75,20 +72,18 @@ export class MatchService {
     // Use provided speed or get stored speed or use default
     const callingSpeed = speed || this.matchSpeeds.get(match.id) || MATCH_NUMBER_EXTRACTION_DELAY;
     this.matchSpeeds.set(match.id, callingSpeed);
+    this.matchRoomIds.set(match.id, roomId);
 
     this.logger.log(`Starting timer for match #${match.id} in room #${roomId} with speed ${callingSpeed}ms`);
 
     const timer = setInterval(async () => {
-      const extractedNumber = await this.extractNumber(match);
-
-      if (extractedNumber === 0) {
-        return;
-      }
+      const extractedNumber = await this.extractNumber(match.id);
 
       if (extractedNumber === null && this.matchTimers.has(match.id)) {
         clearInterval(this.matchTimers.get(match.id));
         this.matchTimers.delete(match.id);
         this.matchSpeeds.delete(match.id);
+        this.matchRoomIds.delete(match.id);
         this.logger.log(`Timer completed for match #${match.id}`);
       }
     }, callingSpeed);
@@ -104,6 +99,7 @@ export class MatchService {
       const timer = this.matchTimers.get(matchId);
       clearInterval(timer);
       this.matchTimers.delete(matchId);
+      this.matchRoomIds.delete(matchId);
       this.logger.log(`[STOP TIMER] ✅ Timer stopped and deleted for match #${matchId}`);
     } else {
       this.logger.warn(`[STOP TIMER] ⚠️ No timer found for match #${matchId}`);
@@ -131,83 +127,70 @@ export class MatchService {
     roomId: number,
     options?: { delay?: number },
   ): Promise<void> {
-    const isElectron = process.env.ELECTRON_MODE === 'true' || process.versions.hasOwnProperty('electron');
-    
-    // Always use direct timer approach for reliability
-    // (Bull queue can have issues with Redis connection)
     if (options?.delay) {
       setTimeout(() => {
         this.startTimer(match, roomId);
       }, options.delay);
-    } else {
-      this.startTimer(match, roomId);
-    }
-    return;
-    
-    // Original queue-based code (disabled for now)
-    /*
-    // Server mode: use Bull queue
-    if (options?.delay) {
-      const delayPromise = new Promise<void>((resolve, reject) => {
-        setTimeout(async () => {
-          try {
-            await this.matchesQueue.add({ match, roomId });
-          } catch (e) {
-            reject(e);
-          }
-
-          resolve();
-        }, options.delay);
-      });
-
-      await delayPromise;
       return;
     }
-
-    await this.matchesQueue.add({ match, roomId });
-    */
+    this.startTimer(match, roomId);
   }
 
-  async extractNumber(match: Match): Promise<number | null> {
-    match = await this.findOne(match.id);
-    if (match.closed) {
+  async extractNumber(matchId: number): Promise<number | null> {
+    const row = await this.matchRepository.findOne({
+      where: { id: matchId },
+      select: { id: true, closed: true },
+    });
+    if (!row || row.closed) {
       return null;
     }
 
-    const cacheKey = this.getMatchNumbersCacheKey(match.id);
-    const cachedNumbers = await this.cacheManager.get<number[]>(cacheKey);
-    const extractedNumbers = Array.isArray(cachedNumbers)
-      ? cachedNumbers
-      : match.matchNumbers.map((number) => number.number) || [];
+    const cacheKey = this.getMatchNumbersCacheKey(matchId);
+    let extractedNumbers = await this.cacheManager.get<number[]>(cacheKey);
 
-    if (!Array.isArray(cachedNumbers)) {
+    if (!Array.isArray(extractedNumbers)) {
+      const rows = await this.matchNumberRepository.find({
+        where: { match: { id: matchId } },
+        select: { number: true },
+      });
+      extractedNumbers = rows.map((entry) => entry.number);
       await this.cacheManager.set(cacheKey, extractedNumbers);
     }
 
-    // Changed from 90 to 75 for 75-ball bingo
     if (extractedNumbers.length >= 75) {
       return null;
     }
 
-    let extractedNumber = null;
-    do {
-      // Changed from 91 to 76 for 75-ball bingo (1-75)
-      extractedNumber = Math.floor(Math.random() * 75) + 1;
-    } while (extractedNumbers.includes(extractedNumber));
+    const drawn = new Set(extractedNumbers);
+    const remaining: number[] = [];
+    for (let n = 1; n <= 75; n++) {
+      if (!drawn.has(n)) {
+        remaining.push(n);
+      }
+    }
+    if (remaining.length === 0) {
+      return null;
+    }
+
+    const extractedNumber =
+      remaining[Math.floor(Math.random() * remaining.length)];
 
     await this.matchNumberRepository.save({
-      match,
+      match: { id: matchId },
       number: extractedNumber,
     });
 
     await this.cacheManager.set(cacheKey, [...extractedNumbers, extractedNumber]);
 
-    this.socketsGateway.server
-      .to(match.room.id.toString())
-      .emit(EXTRACTED_NUMBERS_EVENT, {
-        matchId: match.id,
-        number: extractedNumber,
-      });
+    const roomId = this.matchRoomIds.get(matchId);
+    if (roomId !== undefined) {
+      this.socketsGateway.server
+        .to(roomId.toString())
+        .emit(EXTRACTED_NUMBERS_EVENT, {
+          matchId,
+          number: extractedNumber,
+        });
+    }
 
     return extractedNumber;
   }
@@ -249,7 +232,10 @@ export class MatchService {
       roomPrize,
     });
 
-    if (room.matches.length === BINGO_ONE_MIN_MATCHES) {
+    const matchCount = await this.matchRepository.count({
+      where: { room: { id: room.id } },
+    });
+    if (matchCount === BINGO_ONE_MIN_MATCHES) {
       this.socketsGateway.server
         .to(room.id.toString())
         .emit(BINGO_ONE_STARTED_EVENT);
@@ -280,6 +266,29 @@ export class MatchService {
     }
     
     this.logger.log(`Match #${matchId} closed and timer stopped`);
+  }
+
+  async endMatch(
+    matchId: number,
+    roomId: number,
+    winners?: Array<{ cardNumber?: string; username?: string }>,
+  ): Promise<void> {
+    this.stopTimer(matchId);
+    await this.cardService.unlockCardsForMatch(matchId);
+    await this.matchRepository.update({ id: matchId }, { closed: true });
+    await this.clearMatchNumbersCache(matchId);
+
+    const room = await this.roomService.findOne(roomId);
+    if (room) {
+      await this.roomService.update(roomId, { currentMatch: null });
+    }
+
+    this.socketsGateway.server.to(roomId.toString()).emit(MATCH_ENDED_EVENT, {
+      matchId,
+      winners: winners || [],
+    });
+
+    this.logger.log(`Match #${matchId} ended in room #${roomId}`);
   }
 
   async reset(matchId: number, roomId: number): Promise<void> {
@@ -323,6 +332,12 @@ export class MatchService {
     } else if (matchInstance.room) {
       this.startTimer(matchInstance, matchInstance.room.id);
     }
+  }
+
+  async findOpenByRoom(roomId: number): Promise<Match[]> {
+    return this.matchRepository.find({
+      where: { room: { id: roomId }, closed: false },
+    });
   }
 
   private async findOne(id: number): Promise<Match> {

@@ -62,7 +62,7 @@ export function useBilingualToast() {
   /**
    * Show success toast
    */
-  const showSuccess = async (messageKey: string = 'SUCCESS'): Promise<void> => {
+  const showSuccess = async (messageKey = 'SUCCESS'): Promise<void> => {
     await showToast(messageKey, { color: 'success' });
   };
 

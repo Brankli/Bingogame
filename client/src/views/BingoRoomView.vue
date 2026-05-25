@@ -729,29 +729,28 @@ import { ref, computed, inject, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuth } from '@/store/auth';
 import { useSocket } from '@/store/socket';
+import { useRoomSocket } from '@/composables/useRoomSocket';
 import { Services } from '@/services';
 import UserManagement from '@/components/UserManagement.vue';
 import LanguageSelector from '@/components/LanguageSelector.vue';
 import VolumeControl from '@/components/VolumeControl.vue';
 import { getAmharicAudioService } from '@/services/AmharicAudioService';
-import {
-  EXTRACTED_NUMBERS_EVENT,
-  NEW_MATCH_STARTED_EVENT,
-  ON_ENTER_ROOM_EVENT,
-  ON_EXIT_ROOM_EVENT,
-} from '../../../src/sockets/consts/sockets.const';
+import { END_MATCH_EVENT } from '@/constants/socketEvents';
+import type { Room, RoomManager } from '@/types/room';
+import type { MatchNumber } from '@/types/match';
+import type { VerificationResult } from '@/types/verification';
+import { normalizeCardNumber as normalizeRoomCardNumber } from '@/utils/cardNumber';
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuth();
-const socket = useSocket();
+const socketStore = useSocket();
 const services = inject<Services>('services');
 
 const roomId = computed(() => +route.params.roomId);
 const { user } = auth;
-const { client } = socket;
 
-const room = ref<any>(null);
+const room = ref<Room | null>(null);
 const lastCalledNumber = ref<number>(0);
 const calledNumbers = ref<number[]>([]);
 const gameStatus = ref<'idle' | 'playing' | 'paused'>('idle');
@@ -762,7 +761,7 @@ const showPatternPreview = ref(false); // Collapsed by default
 const showLogoutDialog = ref(false);
 const verifyCardNumber = ref('');
 const verifying = ref(false);
-const verificationResult = ref<any>(null);
+const verificationResult = ref<VerificationResult | null>(null);
 const matchWinners = ref<Array<{ cardNumber: string; timestamp: Date; specialWin?: boolean }>>([]); // Track all winners for current match
 const totalCards = ref(400); // Total number of cards available (400 cards)
 const registeredCards = ref<number[]>([]); // Array of registered card numbers
@@ -824,7 +823,9 @@ const canManageRoom = computed(() => {
   
   // Check if user is assigned as manager
   if (room.value.managers) {
-    return room.value.managers.some((m: any) => m.user.id === user.id);
+    return room.value.managers.some(
+      (m: RoomManager) => m.user?.id === user.id,
+    );
   }
   
   return false;
@@ -842,12 +843,6 @@ const totalReward = computed(() => {
   const totalBet = registeredCards.value.length * betAmount.value;
   const totalFee = registeredCards.value.length * houseFee.value;
   return Math.max(0, totalBet - totalFee);
-});
-
-const prizePerWinner = computed(() => {
-  const winnerCount = matchWinners.value.length;
-  if (winnerCount === 0) return totalReward.value;
-  return Math.floor(totalReward.value / winnerCount);
 });
 
 const getBallLetter = (num: number): string => {
@@ -868,9 +863,9 @@ const getBallColor = (num: number): string => {
   return 'ball-o';
 };
 
-const isNumberCalled = (num: number): boolean => {
-  return calledNumbers.value.includes(num);
-};
+const calledNumbersSet = computed(() => new Set(calledNumbers.value));
+
+const isNumberCalled = (num: number): boolean => calledNumbersSet.value.has(num);
 
 const getStaticCardNumber = (row: number, col: number): number => {
   // Generate a static sample card for display
@@ -1058,7 +1053,9 @@ const getWinningPatternDetails = (): string => {
 
   const letters = ['B', 'I', 'N', 'G', 'O'];
   const details = winningPattern
-    .map(([row, col]: [number, number]) => {
+    .map((cell) => {
+      const row = cell[0] ?? 0;
+      const col = cell[1] ?? 0;
       const columnLetter = letters[col] || '?';
       const cardValue = selectedCardGrid.value?.[row]?.[col];
       const displayValue = cardValue === 0 ? 'FREE' : cardValue ?? '?';
@@ -1150,7 +1147,12 @@ const startRingShuffleMotion = (durationMs = 10000) => {
 const playShuffleSound = () => {
   try {
     // Create a simple shuffle sound using Web Audio API
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const AudioCtx =
+      window.AudioContext ||
+      (window as Window & { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+    if (!AudioCtx) return;
+    const audioContext = new AudioCtx();
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
     
@@ -1289,78 +1291,49 @@ const startNewGame = async () => {
     registeredCards: registeredCardNumbers,
   });
   
-  // Check if socket is connected
-  if (!client || !client.connected) {
-    console.error('[Frontend] ❌ Socket not connected!');
-    showToast('Connection error. Please refresh the page.', 'error');
+  const emitNewMatch = () => {
+    console.log('[Frontend] ✅ Socket connected, emitting event...');
+    socketStore.client?.emit('new-match', {
+      roomId: roomId.value,
+      soldCards: registeredCards.value.length,
+      houseFeePerCard: houseFee.value,
+      registeredCards: registeredCardNumbers,
+    }, (response?: { error?: string }) => {
+      if (response?.error) {
+        console.error('[Frontend] ❌ Server error:', response.error);
+        showToast(`Error starting game: ${response.error}`, 'error');
+      } else {
+        console.log('[Frontend] ✅ Server acknowledged new-match event');
+      }
+    });
+    gameStatus.value = 'playing';
+    matchWinners.value = [];
+    showToast(`Game started with ${registeredCards.value.length} registered cards!`, 'success');
+  };
+
+  if (!socketStore.client?.connected) {
+    socketStore.ensureConnected();
+    if (!socketStore.client) {
+      console.error('[Frontend] ❌ Socket not connected!');
+      showToast('Connection error. Please log in again.', 'error');
+      return;
+    }
+    showToast('Connecting to server...', 'info');
+    socketStore.client.once('connect', emitNewMatch);
     return;
   }
-  
-  console.log('[Frontend] ✅ Socket connected, emitting event...');
-  
-  client?.emit('new-match', {
-    roomId: roomId.value,
-    soldCards: registeredCards.value.length,
-    houseFeePerCard: houseFee.value,
-    registeredCards: registeredCardNumbers, // Send the actual card numbers
-  }, (response: any) => {
-    // Acknowledgment callback
-    if (response?.error) {
-      console.error('[Frontend] ❌ Server error:', response.error);
-      showToast(`Error starting game: ${response.error}`, 'error');
-    } else {
-      console.log('[Frontend] ✅ Server acknowledged new-match event');
-    }
-  });
-  gameStatus.value = 'playing';
-  matchWinners.value = []; // Clear winners list for new game
-  
-  showToast(`Game started with ${registeredCards.value.length} registered cards!`, 'success');
+
+  emitNewMatch();
 };
 
 const normalizeCardNumber = (raw: string): string => {
-  const value = String(raw || '')
-    .trim()
-    .toUpperCase();
+  const value = String(raw || '').trim().toUpperCase();
   if (!value) return '';
-  
-  // If it's already in the ROOM-CAR format (e.g., ROOM9-CAR0001), return as-is
-  if (/^ROOM\d+-CAR\d+$/.test(value)) {
-    return value;
-  }
-  
-  // If it's in SOEMB-CA format (old format), return as-is
   if (value.startsWith('SOEMB-CA')) {
     return value;
   }
-  
-  // If it's just a number (e.g., "1", "11", "123")
-  if (/^\d+$/.test(value)) {
-    const num = parseInt(value, 10);
-    const currentRoomId = room.value?.id || 0;
-    return `ROOM${currentRoomId}-CAR${String(num).padStart(4, '0')}`;
-  }
-  
-  // If it starts with CARD- (e.g., "CARD-001", "CARD-1")
-  if (value.startsWith('CARD-')) {
-    const suffix = value.slice(5);
-    if (/^\d+$/.test(suffix)) {
-      const num = parseInt(suffix, 10);
-      const currentRoomId = room.value?.id || 0;
-      return `ROOM${currentRoomId}-CAR${String(num).padStart(4, '0')}`;
-    }
-  }
-  
-  // Default: try to extract number and convert
-  const match = value.match(/\d+/);
-  if (match) {
-    const num = parseInt(match[0], 10);
-    const currentRoomId = room.value?.id || 0;
-    return `ROOM${currentRoomId}-CAR${String(num).padStart(4, '0')}`;
-  }
-  
-  // If all else fails, return as-is
-  return value;
+  const currentRoomId = room.value?.id || 0;
+  return normalizeRoomCardNumber(value, currentRoomId) || value;
 };
 
 const pauseGame = () => {
@@ -1372,10 +1345,10 @@ const pauseGame = () => {
   console.log('[PAUSE] ========== PAUSE GAME CLICKED ==========');
   console.log('[PAUSE] Match ID:', room.value?.currentMatch?.id);
   console.log('[PAUSE] Room ID:', roomId.value);
-  console.log('[PAUSE] Socket connected:', client?.connected);
+  console.log('[PAUSE] Socket connected:', socketStore.client?.connected);
   console.log('[PAUSE] Emitting pause-match event...');
   
-  client?.emit('pause-match', { 
+  socketStore.client?.emit('pause-match', { 
     matchId: room.value?.currentMatch?.id,
     roomId: roomId.value 
   });
@@ -1392,7 +1365,7 @@ const resumeGame = () => {
     showToast('Only admin or assigned room manager can resume a game.', 'warning');
     return;
   }
-  client?.emit('play-match', {
+  socketStore.client?.emit('play-match', {
     matchId: room.value?.currentMatch?.id,
     roomId: roomId.value,
   });
@@ -1412,7 +1385,7 @@ const changeCallingSpeed = (newSpeed: number) => {
     return;
   }
   
-  client?.emit('change-speed', {
+  socketStore.client?.emit('change-speed', {
     matchId: room.value?.currentMatch?.id,
     roomId: roomId.value,
     speed: newSpeed,
@@ -1452,10 +1425,10 @@ const finishGame = () => {
   
   // Emit game end event to backend
   if (room.value?.currentMatch?.id) {
-    client?.emit('end-match', {
+    socketStore.client?.emit(END_MATCH_EVENT, {
       matchId: room.value.currentMatch.id,
       roomId: roomId.value,
-      winners: matchWinners.value
+      winners: matchWinners.value,
     });
   }
 };
@@ -1468,7 +1441,7 @@ const resetGame = () => {
   
   // Emit reset event to backend
   if (room.value?.currentMatch?.id) {
-    client?.emit('reset-match', {
+    socketStore.client?.emit('reset-match', {
       matchId: room.value.currentMatch.id,
       roomId: roomId.value
     });
@@ -1522,7 +1495,7 @@ const verifyWin = async () => {
       activePattern.value
     );
     
-    verificationResult.value = response?.data;
+    verificationResult.value = response?.data as VerificationResult;
     verifyCardNumber.value = normalizedCardNumber;
     
     // Extract card number for viewing details
@@ -1536,7 +1509,14 @@ const verifyWin = async () => {
     }
 
     if (response?.data.isValid) {
-      // Add winner to the list
+      const alreadyWinner = matchWinners.value.some(
+        (w) => w.cardNumber.toUpperCase() === normalizedCardNumber.toUpperCase(),
+      );
+      if (alreadyWinner) {
+        showToast(`Card ${normalizedCardNumber} is already verified as a winner.`, 'warning');
+        return;
+      }
+
       matchWinners.value.push({
         cardNumber: normalizedCardNumber,
         timestamp: new Date(),
@@ -1556,7 +1536,10 @@ const verifyWin = async () => {
         const winnerCount = matchWinners.value.length;
         const winnerInfo = winnerCount > 1 ? ` (Winner #${winnerCount})` : '';
         
-        const successMessage = `Card ${normalizedCardNumber} wins with ${patternTitle}${winnerInfo}. ${patternDetails ? `Pattern: ${patternDetails}` : ''}`.trim();
+        const serverMessage = response?.data.message?.trim();
+        const successMessage =
+          serverMessage ||
+          `Card ${normalizedCardNumber} wins with ${patternTitle}${winnerInfo}. ${patternDetails ? `Pattern: ${patternDetails}` : ''}`.trim();
         showToast(successMessage, 'success');
         speakMessage(`Congratulations! ${normalizedCardNumber} is a valid ${patternTitle} winner.`);
       }
@@ -1583,22 +1566,14 @@ const verifyWin = async () => {
       speakMessage(`Card not registered. Only registered cards can win.`);
       
       // Do NOT lock the card, just reject the verification
-      // Auto-resume if no valid winners exist
-      if (matchWinners.value.length === 0) {
-        showToast('Game resuming automatically...', 'info');
-        setTimeout(() => resumeGame(), 2000);
-      }
+      showToast('Click RESUME to continue calling numbers.', 'info');
     } else if (response?.data.cardLocked) {
       // Card is locked from previous wrong claim
       const lockedMessage = `Card ${normalizedCardNumber} is locked due to a previous wrong claim.`;
       showToast(lockedMessage, 'error');
       speakMessage(`Invalid claim. ${normalizedCardNumber} is locked.`);
       
-      // Auto-resume if no valid winners exist
-      if (matchWinners.value.length === 0) {
-        showToast('Game resuming automatically...', 'info');
-        setTimeout(() => resumeGame(), 1500);
-      }
+      showToast('Click RESUME to continue calling numbers.', 'info');
     } else {
       // Invalid claim - check if it's a timing issue (late claim)
       const isLateClaim = response?.data.lateClaim || 
@@ -1647,13 +1622,10 @@ const verifyWin = async () => {
           await services?.cardService.lockCard(normalizedCardNumber, room.value.currentMatch.id);
         }
         
-        // Only resume game if NO winners have been verified yet
-        // If there are already winners, the game should stay paused
-        if (matchWinners.value.length === 0) {
-          showToast('Game resuming automatically...', 'info');
-          setTimeout(() => resumeGame(), 1500);
-        } else {
+        if (matchWinners.value.length > 0) {
           showToast('Invalid claim. Game remains paused because valid winners exist.', 'info');
+        } else {
+          showToast('Click RESUME to continue calling numbers.', 'info');
         }
       }
     }
@@ -1694,7 +1666,7 @@ const saveBettingSettings = async () => {
 const loadRoomData = async () => {
   try {
     const response = await services?.roomService.show(roomId.value);
-    room.value = response?.data;
+    room.value = response?.data ?? null;
     betAmount.value = Number(room.value?.ticketPrice || 0);
     
     const permission = await services?.roomService.canManageRoom(roomId.value);
@@ -1704,8 +1676,11 @@ const loadRoomData = async () => {
   }
 };
 
-const getPatternCoordinates = (pattern: string) => {
-  const patterns: { [key: string]: number[][] } = {
+/** Each pattern may have several variants; each variant is a list of [row, col] cells. */
+type PatternCoordinates = number[][][];
+
+const getPatternCoordinates = (pattern: string): PatternCoordinates => {
+  const patterns: Record<string, PatternCoordinates> = {
     anyline: [
       // Show all possible lines for visualization
       [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4]], // Row 0
@@ -1759,8 +1734,8 @@ const isPatternCell = (row: number, col: number, pattern: string) => {
   if (patternCoords.length === 0) return false;
   
   // Check ALL pattern options (important for diagonal which has 2 options)
-  return patternCoords.some(coords => 
-    coords.some(([r, c]) => r === row && c === col)
+  return patternCoords.some((coords) =>
+    coords.some((cell) => cell[0] === row && cell[1] === col),
   );
 };
 
@@ -1771,15 +1746,15 @@ const isWinningPatternCell = (row: number, col: number) => {
   const winningPatterns = verificationResult.value.winningPatterns;
   if (Array.isArray(winningPatterns) && winningPatterns.length > 0) {
     // Check if this cell is in ANY of the winning patterns
-    return winningPatterns.some(pattern => 
-      pattern.some(([r, c]) => r === row && c === col)
+    return winningPatterns.some((pattern) =>
+      pattern.some((cell) => cell[0] === row && cell[1] === col),
     );
   }
   
   // Fallback to single pattern
   const winningPattern = verificationResult.value.winningPattern;
   if (!winningPattern) return false;
-  return winningPattern.some(([r, c]) => r === row && c === col);
+  return winningPattern.some((cell) => cell[0] === row && cell[1] === col);
 };
 
 onMounted(async () => {
@@ -1805,7 +1780,9 @@ onMounted(async () => {
         matchWinners.value = [];
       } else if (room.value.currentMatch.matchNumbers.length > 0) {
         // Match is active - load the numbers
-        calledNumbers.value = room.value.currentMatch.matchNumbers.map((mn: any) => mn.number);
+        calledNumbers.value = room.value.currentMatch.matchNumbers.map(
+          (mn: MatchNumber) => mn.number,
+        );
         lastCalledNumber.value = calledNumbers.value[calledNumbers.value.length - 1] || 0;
         gameStatus.value = 'playing';
         selectedPatternForMatch.value = currentPattern.value;
@@ -1820,74 +1797,26 @@ onMounted(async () => {
       matchWinners.value = [];
     }
 
-    // Connect to socket AFTER room is loaded
-    client?.emit(ON_ENTER_ROOM_EVENT, { roomId: roomId.value });
-    
-    // Monitor socket connection status
-    console.log('[Socket] Connection status:', client?.connected ? 'CONNECTED ✅' : 'DISCONNECTED ❌');
-    
-    client?.on('connect', () => {
-      console.log('[Socket] ✅ Connected to server');
-      showToast('Connected to game server', 'success');
-      // Rejoin room after reconnection
-      client?.emit(ON_ENTER_ROOM_EVENT, { roomId: roomId.value });
+    const { setup: setupRoomSocket } = useRoomSocket({
+      roomId,
+      calledNumbers,
+      lastCalledNumber,
+      gameStatus,
+      room,
+      currentPattern,
+      selectedPatternForMatch,
+      matchWinners,
+      registeredCards,
+      verificationResult,
+      verifyCardNumber,
+      selectedCardForView,
+      selectedCardGrid,
+      showCardDetailsModal,
+      onNumberCalled: announceNumber,
+      showToast,
+      isNumberCalled,
     });
-    
-    client?.on('disconnect', (reason) => {
-      console.log('[Socket] ❌ Disconnected from server. Reason:', reason);
-      showToast('Disconnected from server. Reconnecting...', 'warning');
-    });
-    
-    client?.on('connect_error', (error) => {
-      console.error('[Socket] ❌ Connection error:', error);
-      showToast('Connection error. Please check your internet.', 'error');
-    });
-
-    // Setup socket listeners
-    client?.on(EXTRACTED_NUMBERS_EVENT, ({ number }) => {
-      if (calledNumbers.value.includes(number)) {
-        return;
-      }
-      lastCalledNumber.value = number;
-      calledNumbers.value.push(number);
-      
-      // Announce number in selected language
-      const letter = getBallLetter(number);
-      announceNumber(letter, number);
-    });
-
-    client?.on(NEW_MATCH_STARTED_EVENT, ({ room: updatedRoom }) => {
-      room.value = {
-        ...room.value,
-        ...updatedRoom,
-        managers: updatedRoom?.managers ?? room.value?.managers ?? [],
-      };
-      calledNumbers.value = [];
-      lastCalledNumber.value = 0;
-      gameStatus.value = 'playing';
-      matchWinners.value = []; // Clear winners for new match
-      selectedPatternForMatch.value = currentPattern.value;
-    });
-
-    client?.on('match-paused', ({ matchId }) => {
-      console.log('Match paused:', matchId);
-      gameStatus.value = 'paused';
-    });
-
-    client?.on('match-reset', () => {
-      console.log('Match reset');
-      // Clear all state immediately
-      calledNumbers.value = [];
-      lastCalledNumber.value = 0;
-      gameStatus.value = 'idle';
-      verificationResult.value = null;
-      verifyCardNumber.value = '';
-      matchWinners.value = [];
-      registeredCards.value = [];
-      selectedCardForView.value = null;
-      selectedCardGrid.value = null;
-      showCardDetailsModal.value = false;
-    });
+    setupRoomSocket();
   } catch (error) {
     console.error('Error loading room:', error);
     showToast('Failed to load room. Please try again.', 'error');
@@ -1897,15 +1826,7 @@ onMounted(async () => {
 // Cleanup when leaving the room
 onBeforeUnmount(() => {
   stopRingShuffleMotion();
-  // Remove all socket listeners
-  client?.off(EXTRACTED_NUMBERS_EVENT);
-  client?.off(NEW_MATCH_STARTED_EVENT);
-  client?.off('match-paused');
-  client?.off('match-reset');
-  
-  // Leave the room
-  client?.emit(ON_EXIT_ROOM_EVENT, { roomId: roomId.value });
-  
+
   // Stop speech synthesis
   window.speechSynthesis.cancel();
   

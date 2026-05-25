@@ -21,8 +21,9 @@ class CardService extends Api {
     return this.httpClient.get(`/cards/${cardNumber}`);
   }
 
-  async getByRoom(roomId: number) {
-    return this.httpClient.get(`/cards/room/${roomId}`);
+  async getByRoom(roomId: number, options?: { summary?: boolean }) {
+    const params = options?.summary ? { summary: 'true' } : {};
+    return this.httpClient.get(`/cards/room/${roomId}`, { params });
   }
 
   async getUserCardsInRoom(userId: number, roomId: number) {

@@ -14,6 +14,7 @@ import { User } from '../../user/entities/user.entity';
 import { Match } from '../../match/entities/match.entity';
 import { RoomPrize } from './room-prize.entity';
 import { RoomManager } from './room-manager.entity';
+import { RoomCardMode } from '../consts/room-card-mode.const';
 
 @Entity({ name: 'rooms' })
 export class Room {
@@ -23,6 +24,14 @@ export class Room {
   @Column({ nullable: false })
   name!: string;
 
+  /** static = copy shared master deck; automatic = unique per-room generation */
+  @Column({
+    type: 'varchar',
+    length: 16,
+    default: RoomCardMode.AUTOMATIC,
+  })
+  cardMode!: RoomCardMode;
+
   @ManyToOne(() => User, (user) => user.rooms, {
     cascade: true,
     onDelete: 'CASCADE',
@@ -31,7 +40,6 @@ export class Room {
 
   @OneToMany(() => RoomManager, (manager) => manager.room, {
     cascade: true,
-    eager: true,
   })
   managers?: RoomManager[];
 
@@ -50,7 +58,6 @@ export class Room {
 
   @OneToMany(() => Match, (match) => match.room, {
     cascade: true,
-    eager: true,
     onDelete: 'CASCADE',
   })
   matches?: Match[];
@@ -59,16 +66,15 @@ export class Room {
   @JoinTable()
   currentUsers!: User[];
 
-  @OneToOne(() => Match, { eager: true, onDelete: 'CASCADE' })
+  @OneToOne(() => Match, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn()
-  currentMatch!: Match;
+  currentMatch?: Match | null;
 
   @Column({ default: 0.5, type: 'float', scale: 2 })
   ticketPrice!: number;
 
   @OneToOne(() => RoomPrize, {
     cascade: true,
-    eager: true,
     onDelete: 'CASCADE',
   })
   @JoinColumn()

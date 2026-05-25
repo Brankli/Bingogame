@@ -44,4 +44,12 @@ export class Card {
 
   @Column({ default: false })
   isLocked!: boolean;
+
+  /** Master deck shared by all rooms using static card mode */
+  @Column({ default: false })
+  isStaticTemplate!: boolean;
+
+  /** Slot 1–400 for static template cards */
+  @Column({ type: 'int', nullable: true })
+  templateIndex?: number | null;
 }

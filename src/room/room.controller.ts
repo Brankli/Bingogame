@@ -7,7 +7,11 @@ import {
   Delete,
   ForbiddenException,
   UseGuards,
+  ParseIntPipe,
+  Query,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { RoomService } from './room.service';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { mapToRoomDto, RoomDto } from './dto/room.dto';
@@ -33,17 +37,34 @@ export class RoomController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @Post()
-  async create(
-    @User() user,
-    @Body() createRoomDto: CreateRoomDto,
-  ): Promise<RoomDto> {
-    const room = await this.roomService.create(user, createRoomDto);
-    return mapToRoomDto(room);
+  async create(@User() user, @Body() createRoomDto: CreateRoomDto) {
+    const { room, cardGeneration } = await this.roomService.create(
+      user,
+      createRoomDto,
+    );
+    return {
+      ...mapToRoomDto(room),
+      cardGeneration,
+    };
   }
 
   @Get()
   async findAll(): Promise<RoomDto[]> {
     return this.roomService.findAll().then((rooms) => rooms.map(mapToRoomDto));
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Get('static-card-library/status')
+  getStaticCardLibraryStatus() {
+    return this.roomService.getStaticCardLibraryStatus();
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Post('static-card-library/generate')
+  generateStaticCardLibrary(@Body() body: { reset?: boolean } = {}) {
+    return this.roomService.generateStaticCardLibrary(Boolean(body.reset));
   }
 
   @Get(':id')
@@ -129,7 +150,9 @@ export class RoomController {
     const requestedUserId = Number(userId);
     const requesterIsAdmin = user?.role === UserRole.ADMIN;
     if (!requesterIsAdmin && user?.id !== requestedUserId) {
-      throw new ForbiddenException('You can only access your own managed rooms');
+      throw new ForbiddenException(
+        'You can only access your own managed rooms',
+      );
     }
 
     const rooms = await this.roomService.getUserManagedRooms(requestedUserId);
@@ -152,22 +175,58 @@ export class RoomController {
   @Post('cleanup-invalid-managers')
   async cleanupInvalidManagers() {
     const count = await this.roomService.cleanupInvalidManagers();
-    return { 
-      success: true, 
+    return {
+      success: true,
       message: `Cleaned up ${count} invalid manager assignment(s)`,
-      count 
+      count,
     };
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
+  @Get(':id/card-status')
+  async getRoomCardStatus(@Param('id', ParseIntPipe) id: number) {
+    return this.roomService.getRoomCardStatus(id);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Get(':id/cards/preview')
+  async previewRoomCard(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('index') index?: string,
+  ) {
+    const cardIndex = index ? parseInt(index, 10) : 1;
+    return this.roomService.previewRoomCard(id, cardIndex);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Get(':id/cards/export')
+  async exportRoomCards(
+    @Param('id', ParseIntPipe) id: number,
+    @Res() res: Response,
+  ) {
+    const csv = await this.roomService.exportRoomCardsCsv(id);
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="room-${id}-cards.csv"`,
+    );
+    res.send(csv);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
   @Post(':id/generate-cards')
-  async generateCardsForRoom(@Param('id') id: number) {
-    const result = await this.roomService.generateCardsForExistingRoom(id);
+  async generateCardsForRoom(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { reset?: boolean } = {},
+  ) {
+    const result = await this.roomService.generateCardsForExistingRoom(id, body);
     return {
-      success: true,
-      message: `Generated ${result.generated} cards for room`,
-      generated: result.generated,
+      success: result.status !== 'failed',
+      ...result,
     };
   }
 
@@ -175,7 +234,7 @@ export class RoomController {
   @Roles(UserRole.ADMIN)
   @Post(':id/copy-cards')
   async copyCardsFromRoom(
-    @Param('id') targetRoomId: number,
+    @Param('id', ParseIntPipe) targetRoomId: number,
     @Body() body: { sourceRoomId: number },
   ) {
     const result = await this.roomService.copyCardsFromRoom(
@@ -184,8 +243,7 @@ export class RoomController {
     );
     return {
       success: true,
-      message: `Copied ${result.copied} cards to room`,
-      copied: result.copied,
+      ...result,
     };
   }
 }
