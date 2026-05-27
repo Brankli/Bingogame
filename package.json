@@ -7,7 +7,7 @@
   "license": "UNLICENSED",
   "scripts": {
     "prebuild": "rimraf dist",
-    "build": "nest build",
+    "build": "npx nest build"
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
@@ -22,6 +22,7 @@
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
+    "@nestjs/cli": "^9.0.0",
     "@nestjs-modules/ioredis": "^2.2.1",
     "@nestjs/bull": "^0.6.2",
     "@nestjs/common": "^9.0.0",
@@ -58,7 +59,7 @@
     "vue-3-socket.io": "^1.0.5"
   },
   "devDependencies": {
-    "@nestjs/cli": "^9.0.0",
+ 
     "@nestjs/schematics": "^9.0.0",
     "@nestjs/testing": "^9.0.0",
     "@types/bull": "^4.10.0",
