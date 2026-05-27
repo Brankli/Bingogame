@@ -30,11 +30,14 @@ export function buildTypeOrmConfig(
     const os = require('os');
     const path = require('path');
     const fs = require('fs');
+
     const dbPath = path.join(os.homedir(), '.bingo', 'bingo.db');
     const dbDir = path.dirname(dbPath);
+
     if (!fs.existsSync(dbDir)) {
       fs.mkdirSync(dbDir, { recursive: true });
     }
+
     return {
       type: 'sqljs',
       location: dbPath,
@@ -44,43 +47,28 @@ export function buildTypeOrmConfig(
     };
   }
 
-  const dbType = (
-    configService.get<string>('DB_TYPE') ||
-    (Number(configService.get('DB_PORT')) === 3306 ? 'mysql' : 'postgres')
-  ).toLowerCase();
-
-  const host = configService.get<string>('DB_HOST') || '127.0.0.1';
-  const port =
-    Number(configService.get('DB_PORT')) || (dbType === 'mysql' ? 3306 : 5432);
-  const username = configService.get<string>('DB_USER');
-  const password = configService.get<string>('DB_PASS');
-  const database = configService.get<string>('DB_NAME');
-
-  if (dbType === 'mysql') {
+  // Production (Render)
+  if (process.env.NODE_ENV === 'production') {
     return {
-      type: 'mysql',
-      host,
-      port,
-      username,
-      password,
-      database,
+      type: 'postgres',
+      url: configService.get<string>('DATABASE_URL'),
       entities: ENTITIES,
-      synchronize,
+      synchronize: false,
+      ssl: {
+        rejectUnauthorized: false,
+      },
     };
   }
 
+  // Local development
   return {
-    type: 'postgres',
-    host,
-    port,
-    username,
-    password,
-    database,
+    type: 'mysql',
+    host: configService.get<string>('DB_HOST'),
+    port: Number(configService.get('DB_PORT')),
+    username: configService.get<string>('DB_USER'),
+    password: configService.get<string>('DB_PASS'),
+    database: configService.get<string>('DB_NAME'),
     entities: ENTITIES,
     synchronize,
-    ssl:
-      process.env.NODE_ENV === 'production'
-        ? { rejectUnauthorized: false }
-        : false,
   };
 }
