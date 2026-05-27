@@ -9,7 +9,7 @@
     "prebuild": "rimraf dist",
     "build": "npx nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
-    "start": "nest start",
+   "start": "node dist/main",
     "start:dev": "nest start --watch",
     "stop:dev": "fuser -k 3000/tcp 2>/dev/null || lsof -ti:3000 | xargs -r kill -9 2>/dev/null || true",
     "start:debug": "nest start --debug --watch",
