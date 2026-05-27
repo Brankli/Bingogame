@@ -36,11 +36,11 @@ export class User {
   @Column({ type: 'float', default: 0 })
   totalEarnings!: number;
 
-  @Column({ type: 'datetime', nullable: true })
-  createdAt!: Date;
+  @Column({ type: 'timestamp', nullable: true })
+createdAt!: Date;
 
-  @Column({ type: 'datetime', nullable: true })
-  lastActive!: Date;
+@Column({ type: 'timestamp', nullable: true })
+lastActive!: Date;
 
   @BeforeInsert()
   setDates() {
