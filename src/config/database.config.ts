@@ -1,5 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
+
 import { Room } from '../room/entities/room.entity';
 import { RoomPrize } from '../room/entities/room-prize.entity';
 import { RoomManager } from '../room/entities/room-manager.entity';
@@ -24,8 +25,14 @@ export function buildTypeOrmConfig(
   configService: ConfigService,
   isElectron: boolean,
 ): TypeOrmModuleOptions {
-  const synchronize = process.env.NODE_ENV !== 'production';
+  const isProduction = process.env.NODE_ENV === 'production';
+  const synchronize = !isProduction;
 
+  /**
+   * =========================
+   * ELECTRON (LOCAL DESKTOP)
+   * =========================
+   */
   if (isElectron) {
     const os = require('os');
     const path = require('path');
@@ -47,11 +54,21 @@ export function buildTypeOrmConfig(
     };
   }
 
-  // Production (Render)
-  if (process.env.NODE_ENV === 'production') {
+  /**
+   * =========================
+   * PRODUCTION (RENDER)
+   * =========================
+   */
+  if (isProduction) {
+    const dbUrl = configService.get<string>('DATABASE_URL');
+
+    if (!dbUrl) {
+      throw new Error('❌ DATABASE_URL is missing in production environment');
+    }
+
     return {
       type: 'postgres',
-      url: configService.get<string>('DATABASE_URL'),
+      url: dbUrl,
       entities: ENTITIES,
       synchronize: false,
       ssl: {
@@ -60,14 +77,28 @@ export function buildTypeOrmConfig(
     };
   }
 
-  // Local development
+  /**
+   * =========================
+   * LOCAL DEVELOPMENT (MYSQL)
+   * =========================
+   */
+  const host = configService.get<string>('DB_HOST');
+  const port = Number(configService.get<string>('DB_PORT'));
+  const username = configService.get<string>('DB_USER');
+  const password = configService.get<string>('DB_PASS');
+  const database = configService.get<string>('DB_NAME');
+
+  if (!host || !port || !username || !password || !database) {
+    throw new Error('❌ MySQL configuration is incomplete in .env');
+  }
+
   return {
     type: 'mysql',
-    host: configService.get<string>('DB_HOST'),
-    port: Number(configService.get('DB_PORT')),
-    username: configService.get<string>('DB_USER'),
-    password: configService.get<string>('DB_PASS'),
-    database: configService.get<string>('DB_NAME'),
+    host,
+    port,
+    username,
+    password,
+    database,
     entities: ENTITIES,
     synchronize,
   };
