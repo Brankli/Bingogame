@@ -43,10 +43,10 @@ export class Room {
   })
   managers?: RoomManager[];
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: 'timestamp', nullable: true })
   createdAt!: Date;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: 'timestamp', nullable: true })
   startedAt!: Date;
 
   @BeforeInsert()
