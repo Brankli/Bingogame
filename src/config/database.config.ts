@@ -59,24 +59,38 @@ export function buildTypeOrmConfig(
    * PRODUCTION (RENDER)
    * =========================
    */
-  if (isProduction) {
-    const dbUrl = configService.get<string>('DATABASE_URL');
+  // if (isProduction) {
+  //   const dbUrl = configService.get<string>('DATABASE_URL');
 
-    if (!dbUrl) {
-      throw new Error('❌ DATABASE_URL is missing in production environment');
-    }
+  //   if (!dbUrl) {
+  //     throw new Error('❌ DATABASE_URL is missing in production environment');
+  //   }
 
-    return {
-      type: 'postgres',
-      url: dbUrl,
-      entities: ENTITIES,
-      synchronize: false,
-      ssl: {
-        rejectUnauthorized: false,
-      },
-    };
-  }
+  //   return {
+  //     type: 'postgres',
+  //     url: dbUrl,
+  //     entities: ENTITIES,
+  //     synchronize: false,
+  //     ssl: {
+  //       rejectUnauthorized: false,
+  //     },
+  //   };
+  // }
+// Production (Render)
+if (process.env.NODE_ENV === 'production') {
+  return {
+    type: 'postgres',
+    url: configService.get<string>('DATABASE_URL'),
+    entities: ENTITIES,
 
+    // IMPORTANT
+    synchronize: true,
+
+    ssl: {
+      rejectUnauthorized: false,
+    },
+  };
+}
   /**
    * =========================
    * LOCAL DEVELOPMENT (MYSQL)
