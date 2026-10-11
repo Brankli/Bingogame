@@ -32,6 +32,17 @@ export interface RoomCardPreviewDto {
   grid: number[][];
 }
 
+export interface RoomCardCatalogItemDto {
+  index: number;
+  cardNumber: string;
+}
+
+export interface RoomCardCatalogDto {
+  roomId: number;
+  total: number;
+  cards: RoomCardCatalogItemDto[];
+}
+
 export interface StaticCardLibraryStatusDto {
   total: number;
   complete: boolean;

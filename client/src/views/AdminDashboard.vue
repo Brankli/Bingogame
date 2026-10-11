@@ -1,13 +1,10 @@
 <template>
   <div class="modern-admin-layout">
     <!-- Top Navigation Bar -->
-    <v-app-bar color="white" elevation="1" class="top-bar">
+    <v-app-bar color="white" elevation="1" class="top-bar" height="72">
       <v-app-bar-nav-icon @click="drawer = !drawer" class="menu-icon"></v-app-bar-nav-icon>
       
-      <v-toolbar-title class="app-title">
-        <v-icon color="primary" class="mr-2">mdi-view-dashboard</v-icon>
-        <span class="text-h6 font-weight-bold">Bingo Admin</span>
-      </v-toolbar-title>
+    
 
       <v-spacer></v-spacer>
 
@@ -17,15 +14,17 @@
 
       <v-menu>
         <template v-slot:activator="{ props }">
-          <v-btn v-bind="props" class="user-menu-btn">
-            <v-avatar color="primary" size="32" class="mr-2">
+          <v-btn v-bind="props" class="user-menu-btn" aria-label="Open account menu">
+            <v-avatar color="primary" size="38" class="mr-2">
               <v-icon size="small">mdi-account</v-icon>
             </v-avatar>
-            <div class="user-info">
-              <div class="user-name">{{ user?.username }}</div>
-              <div class="user-role">Admin</div>
-            </div>
-            <v-icon class="ml-2">mdi-chevron-down</v-icon>
+            <span class="d-none d-sm-inline-flex">
+              <div class="user-info">
+                <div class="user-name">{{ user?.username }}</div>
+                <div class="user-role">Admin</div>
+              </div>
+              <v-icon class="ml-2">mdi-chevron-down</v-icon>
+            </span>
           </v-btn>
         </template>
         <v-list>
@@ -48,8 +47,9 @@
     <!-- Sidebar Navigation -->
     <v-navigation-drawer
       v-model="drawer"
-      :rail="rail"
-      permanent
+      :rail="rail && mdAndUp"
+      :permanent="mdAndUp"
+      :temporary="!mdAndUp"
       class="modern-sidebar"
       color="#1a1d2e"
     >
@@ -57,7 +57,7 @@
         <v-icon color="white" size="large">mdi-apps</v-icon>
         <div v-if="!rail" class="ml-3">
           <div class="sidebar-title">Admin Panel</div>
-          <div class="sidebar-subtitle">Management System</div>
+          <!-- <div class="sidebar-subtitle">Management System</div> -->
         </div>
       </div>
 
@@ -123,7 +123,7 @@
       </v-list>
 
       <template v-slot:append>
-        <div class="pa-2">
+        <div v-if="mdAndUp" class="pa-2">
           <v-btn
             icon
             @click.stop="rail = !rail"
@@ -137,7 +137,7 @@
 
     <!-- Main Content -->
     <v-main class="main-content">
-      <v-container fluid class="pa-6">
+      <v-container fluid class="admin-content-container">
         <v-window v-model="activeTab">
           <!-- Dashboard Tab -->
           <v-window-item value="dashboard">
@@ -255,6 +255,7 @@
 </template>
 
 <script setup lang="ts">
+import { useDisplay } from 'vuetify';
 import { useAdminDashboard } from '../composables/useAdminDashboard';
 import AdminDashboardTab from '../components/admin/AdminDashboardTab.vue';
 import AdminRoomsTab from '../components/admin/AdminRoomsTab.vue';
@@ -262,6 +263,8 @@ import AdminUsersTab from '../components/admin/AdminUsersTab.vue';
 import AdminRegisterTab from '../components/admin/AdminRegisterTab.vue';
 import AdminCardsTab from '../components/admin/AdminCardsTab.vue';
 import AdminProfileTab from '../components/admin/AdminProfileTab.vue';
+
+const { mdAndUp } = useDisplay();
 
 const {
   user,
@@ -282,18 +285,73 @@ const {
 /* Modern Admin Layout */
 .modern-admin-layout {
   min-height: 100vh;
+  width: 100%;
+  max-width: 100%;
   background: #f5f7fa;
+  overflow-x: hidden;
 }
 
 /* Top Bar */
 .top-bar {
   border-bottom: 1px solid #e0e0e0 !important;
+  padding: 0 12px;
+  z-index: 1005 !important;
   
   .app-title {
     display: flex;
     align-items: center;
-    font-weight: 600;
     color: #2c3e50;
+    gap: 10px;
+    min-width: 0;
+
+    .brand-mark {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+      width: 34px;
+      height: 34px;
+      border-radius: 9px;
+      background: linear-gradient(135deg, #2d7bd8 0%, #1558ad 100%);
+    }
+
+    strong,
+    small {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    strong {
+      font-size: 1.05rem;
+      line-height: 1.1;
+    }
+
+    small {
+      margin-top: 3px;
+      color: #8a97a8;
+      font-size: 0.68rem;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+    }
+
+    @media (max-width: 600px) {
+      gap: 8px;
+
+      .brand-mark {
+        width: 30px;
+        height: 30px;
+      }
+
+      strong {
+        font-size: 0.95rem;
+      }
+
+      small {
+        display: none;
+      }
+    }
   }
 
   .menu-icon {
@@ -305,6 +363,11 @@ const {
     height: auto;
     padding: 8px 16px;
     border-radius: 8px;
+    
+    @media (max-width: 600px) {
+      min-width: auto;
+      padding: 8px;
+    }
     
     .user-info {
       text-align: left;
@@ -328,9 +391,11 @@ const {
 /* Sidebar */
 .modern-sidebar {
   border-right: none !important;
+  box-shadow: 10px 0 28px rgba(24, 35, 55, 0.08);
   
   .sidebar-header {
-    padding: 24px 16px;
+    min-height: 96px;
+    padding: 24px 20px;
     display: flex;
     align-items: center;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
@@ -398,6 +463,22 @@ const {
 /* Main Content */
 .main-content {
   background: #f5f7fa;
+  min-width: 0;
+  width: 100%;
+}
+
+.admin-content-container {
+  width: 100%;
+  max-width: 1600px;
+  min-width: 0;
+  margin: 0 auto;
+  padding: 28px clamp(12px, 2.4vw, 36px) 40px !important;
+}
+
+.v-window,
+.v-window-item {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .page-header {
@@ -413,6 +494,14 @@ const {
   
   .text-grey {
     color: #8898aa;
+  }
+
+  .page-kicker {
+    color: #2972c7;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
   }
 }
 
@@ -520,12 +609,68 @@ const {
 
 /* Responsive */
 @media (max-width: 960px) {
+  .admin-content-container {
+    padding-top: 20px !important;
+  }
+
   .page-header {
     flex-direction: column;
     gap: 16px;
     
     .text-right {
       text-align: left !important;
+    }
+  }
+
+  @media (max-width: 600px) {
+    .top-bar {
+      padding: 0 4px;
+    }
+
+    .top-bar .v-toolbar__content {
+      gap: 2px;
+    }
+
+    .top-bar .v-btn.mr-2 {
+      margin-right: 0 !important;
+    }
+
+    .admin-content-container {
+      padding: 16px 12px 28px !important;
+    }
+
+    .page-header {
+      margin-bottom: 18px;
+    }
+
+    .page-header h1 {
+      font-size: 1.65rem !important;
+    }
+
+    .metric-card .v-card-text {
+      padding: 18px !important;
+    }
+
+    .metric-card .metric-value {
+      font-size: 2rem;
+    }
+
+    .modern-card-header {
+      padding: 16px !important;
+    }
+
+    .modern-card-header .v-avatar {
+      width: 40px !important;
+      height: 40px !important;
+      margin-right: 10px !important;
+    }
+
+    .modern-rooms-card > .v-card-text,
+    .modern-action-card > .v-card-text,
+    .modern-card-selector > .v-card-text,
+    .modern-guide-card > .v-card-text,
+    .modern-generation-card > .v-card-text {
+      padding: 16px !important;
     }
   }
 }

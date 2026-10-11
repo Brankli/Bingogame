@@ -8,4 +8,8 @@ export class CreateMatchDto {
   @IsArray()
   @IsString({ each: true })
   registeredCards?: string[];
+
+  @IsOptional()
+  @IsString()
+  pattern?: string;
 }

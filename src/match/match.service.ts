@@ -217,13 +217,14 @@ export class MatchService {
       room,
       soldCards: createMatchDto.soldCards,
       registeredCards: createMatchDto.registeredCards || [],
+      pattern: createMatchDto.pattern || 'twoline',
     });
     await this.clearMatchNumbersCache(match.id);
 
     this.logger.log(
       `Match created with ${
         createMatchDto.registeredCards?.length || 0
-      } registered cards`,
+      } registered cards and pattern: ${match.pattern}`,
     );
 
     const roomPrize = room.roomPrize;

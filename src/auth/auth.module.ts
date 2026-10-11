@@ -11,6 +11,7 @@ import { LocalStrategy } from './local.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { RoomManagerGuard } from './guards/room-manager.guard';
+import { RoomModule } from '../room/room.module';
 
 @Module({
   imports: [
@@ -28,7 +29,7 @@ import { RoomManagerGuard } from './guards/room-manager.guard';
       inject: [ConfigService],
     }),
     UserModule,
-    forwardRef(() => require('../room/room.module').RoomModule),
+    forwardRef(() => RoomModule),
   ],
   controllers: [AuthController],
   providers: [

@@ -3,6 +3,7 @@ import type { Room } from '@/types/room';
 import type { RoomCardMode } from '@/types/room';
 import type {
   RoomCardPreview,
+  RoomCardCatalog,
   RoomCardStatus,
   RoomCardGenerationResult,
   RoomCreateResponse,
@@ -48,6 +49,10 @@ export default class RoomService extends Api {
         });
     }
 
+    public getRoomCardCatalog(roomId: number): AxiosPromise<RoomCardCatalog> {
+        return this.httpClient.get<RoomCardCatalog>(`/rooms/${roomId}/cards`);
+    }
+
     public async exportRoomCards(roomId: number): Promise<void> {
         const response = await this.httpClient.get(`/rooms/${roomId}/cards/export`, {
             responseType: 'blob',
@@ -67,6 +72,10 @@ export default class RoomService extends Api {
 
     public ticketPrice(roomId: number, ticketPrice: number) {
         return this.httpClient.post<Room>(`/rooms/${roomId}/ticket-price`, { ticketPrice });
+    }
+
+    public cardDisplayLimit(roomId: number, cardDisplayLimit: number) {
+        return this.httpClient.post<Room>(`/rooms/${roomId}/card-display-limit`, { cardDisplayLimit });
     }
 
     public resetPrize(roomId: number, prizeToReset: string) {

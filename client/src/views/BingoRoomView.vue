@@ -1,30 +1,175 @@
 <template>
-  <div class="bingo-room" v-if="room">
-    <!-- Header with Navigation -->
-    <v-app-bar color="primary" dark elevation="4" class="room-header">
-      <v-btn icon @click="goBack">
-        <v-icon>mdi-arrow-left</v-icon>
-      </v-btn>
-      
-      <v-toolbar-title>
-        <v-icon class="mr-2">mdi-cards</v-icon>
-        {{ room.name || '75-Ball Bingo' }}
-      </v-toolbar-title>
+  <div class="bingo-room bingo-room-terminal" v-if="room">
+    <!-- Terminal header -->
+    <div class="terminal-header">
+      <div class="terminal-header-top">
+        <button class="terminal-brand" type="button" @click="goBack">
+          <v-icon size="small" class="mr-2">mdi-arrow-left</v-icon>
+          <img class="terminal-brand-logo" src="/img/asmat-bingo-logo.png" alt="Asmat Bingo logo" />
+          <span>Asmat Bingo</span>
+        </button>
+        <div class="terminal-header-actions">
+          <v-menu location="bottom end" :close-on-content-click="false">
+            <template #activator="{ props }">
+              <button v-bind="props" class="terminal-icon-btn" type="button" aria-label="Language settings"
+                title="Language settings">
+                <v-icon size="small">mdi-eye</v-icon>
+              </button>
+            </template>
+            <v-card class="terminal-menu-card">
+              <v-card-title class="text-subtitle-2">Language</v-card-title>
+              <v-card-text>
+                <LanguageSelector @language-changed="handleLanguageChange" />
+              </v-card-text>
+            </v-card>
+          </v-menu>
+          <button v-if="gameStatus === 'idle' && canManageRoom" class="terminal-icon-btn" type="button"
+            aria-label="Game and fee settings" title="Game and fee settings" :aria-expanded="showPatternSettings"
+            @click="showPatternSettings = !showPatternSettings">
+            <v-icon size="small">mdi-cart</v-icon>
+          </button>
+          <v-menu v-if="canManageRoom" location="bottom end" :close-on-content-click="false">
+            <template #activator="{ props }">
+              <button v-bind="props" class="terminal-user-menu-btn" type="button"
+                aria-label="User and house fee settings" title="User and house fee settings">
+                <v-avatar color="primary" size="24" class="mx-1">
+                  <span class="text-caption text-white">{{ user?.username?.charAt(0).toUpperCase() || 'A' }}</span>
+                </v-avatar>
+                <span class="terminal-user-name">{{ user?.username || 'admin' }}</span>
+              </button>
+            </template>
+            <v-card class="terminal-menu-card terminal-fee-menu-card">
+              <v-card-title class="text-subtitle-2">House Fee / Commission</v-card-title>
+              <v-card-text>
+                <v-select v-model="houseFee" :items="houseFeeOptions" item-title="title" item-value="value"
+                  label="Commission per card (%)" prepend-inner-icon="mdi-percent" density="compact" variant="outlined"
+                  hide-details />
+              </v-card-text>
+            </v-card>
+          </v-menu>
+          <template v-else>
+            <v-avatar color="primary" size="24" class="mx-1">
+              <span class="text-caption text-white">{{ user?.username?.charAt(0).toUpperCase() || 'A' }}</span>
+            </v-avatar>
+            <span class="terminal-user-name">{{ user?.username || 'admin' }}</span>
+          </template>
+          <button class="terminal-icon-btn" type="button" aria-label="Logout" title="Logout" @click="confirmLogout">
+            <v-icon size="small">mdi-logout</v-icon>
+          </button>
+        </div>
+      </div>
+      <div class="terminal-color-bar">
+        <div class="bar-tab tab-black"><span class="tab-label">Black</span></div>
+        <div class="bar-tab tab-blue"><span class="tab-label">Blue</span></div>
+        <div class="bar-tab tab-green"><span class="tab-label">Green</span></div>
+        <div class="bar-tab tab-yellow"><span class="tab-label">Yellow</span></div>
+      </div>
+    </div>
 
-      <v-spacer></v-spacer>
+    <v-expand-transition>
+      <section v-if="gameStatus === 'idle' && canManageRoom && showPatternSettings" class="pattern-settings-panel"
+        aria-label="Game pattern settings">
+        <div class="pattern-settings-inner">
+          <div class="pattern-settings-heading">
+            <div>
+              <div class="pattern-settings-title">Game Pattern</div>
+              <div class="pattern-settings-subtitle">Choose the winning pattern before starting the game.</div>
+            </div>
+            <button type="button" class="pattern-settings-close" aria-label="Close game pattern settings"
+              @click="showPatternSettings = false">
+              <v-icon size="small">mdi-close</v-icon>
+            </button>
+          </div>
+          <div class="pattern-settings-controls">
+            <v-select v-model="currentPattern" :items="patterns" label="Pattern" density="compact" variant="outlined"
+              hide-details />
+            <v-btn variant="outlined" color="primary" @click="showPatternPreview = !showPatternPreview">
+              <v-icon class="mr-1">{{ showPatternPreview ? 'mdi-eye-off' : 'mdi-eye' }}</v-icon>
+              {{ showPatternPreview ? 'Hide' : 'Show' }} Preview
+            </v-btn>
+          </div>
+          <div v-if="showPatternPreview" class="header-pattern-preview">
+            <div class="pattern-preview-description">{{ getPatternTitle(currentPattern) }}</div>
+            <div class="pattern-card-header">
+              <div class="pattern-header-letter letter-b">B</div>
+              <div class="pattern-header-letter letter-i">I</div>
+              <div class="pattern-header-letter letter-n">N</div>
+              <div class="pattern-header-letter letter-g">G</div>
+              <div class="pattern-header-letter letter-o">O</div>
+            </div>
+            <table class="pattern-grid">
+              <tbody>
+                <tr v-for="row in 5" :key="row">
+                  <td v-for="col in 5" :key="col" class="pattern-cell"
+                    :class="{ 'pattern-active': isPreviewPatternCell(row - 1, col - 1, currentPattern), 'pattern-free': row === 3 && col === 3 }">
+                    <span v-if="row === 3 && col === 3">FREE</span>
+                    <span v-else>{{ getStaticCardNumber(row - 1, col - 1) }}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </v-expand-transition>
 
-      <v-chip class="mr-3" color="white" text-color="primary" v-if="user">
-        <v-icon left small>mdi-account</v-icon>
-        {{ user.username }}
-      </v-chip>
+    <!-- New-game terminal -->
+    <div v-if="gameStatus === 'idle'" class="terminal-content">
+      <div class="terminal-info-grid">
+        <div class="info-box text-center">
+          <div class="info-label">BET AMOUNT</div>
+          <div class="bet-control-wrap">
+            <button class="bet-btn" type="button" aria-label="Decrease bet"
+              @click="betAmount = Math.max(1, betAmount - 1)">-</button>
+            <input v-model.number="betAmount" type="number" min="1" step="0.5" inputmode="decimal"
+              aria-label="Bet amount" class="bet-input-field"
+              @change="betAmount = Math.max(1, Number(betAmount) || 1)" />
+            <button class="bet-btn" type="button" aria-label="Increase bet" @click="betAmount++">+</button>
+          </div>
+        </div>
 
-      <v-btn icon @click="confirmLogout">
-        <v-icon>mdi-logout</v-icon>
-      </v-btn>
-    </v-app-bar>
+        <div class="info-box text-center">
+          <div class="info-label">GAME NUMBER</div>
+          <div class="game-number-val">{{ room.currentMatch?.id || '0' }}</div>
 
-    <v-row class="room-content">
-      <!-- Left Panel: Number Display & Controls -->
+        </div>
+
+        <div class="info-box wallet-box wallet-status-banner text-center">
+          <div class="wallet-status-banner">WALLET STATUS<br> Excellent</div>
+
+        </div>
+      </div>
+
+      <div class="card-grid-container">
+        <div class="cards-flex-wrap">
+          <button v-for="cardNum in cardNumbers" :key="cardNum" type="button" class="terminal-card-tile"
+            :class="{ 'tile-selected': isCardRegistered(cardNum) }" :aria-pressed="isCardRegistered(cardNum)"
+            @click="toggleCardRegistration(cardNum)">
+            {{ cardNum }}
+          </button>
+        </div>
+        <div v-if="!cardNumbers.length" class="card-catalog-empty">
+          No cards are available for this room.
+        </div>
+      </div>
+
+      <div v-if="cardNumbers.length" class="card-range-summary">
+        <span class="range-badge">
+          1-{{ cardNumbers[cardNumbers.length - 1] }}
+        </span>
+      </div>
+
+      <div class="registered-cards-summary" aria-live="polite">
+        {{ registeredCards.length }} card{{ registeredCards.length === 1 ? '' : 's' }} registered
+      </div>
+
+      <button type="button" class="terminal-start-btn" :disabled="registeredCards.length === 0" @click="startNewGame">
+        Start Game
+      </button>
+
+    </div>
+
+    <v-row v-else>
       <v-col cols="12" lg="3" md="4" class="left-panel">
         <v-card class="mb-4 info-card">
           <v-card-title class="info-card-title text-center">
@@ -42,40 +187,23 @@
             <h3 class="mt-4">Numbers Called: {{ calledNumbers.length }}/75</h3>
 
             <div class="recent-numbers mt-4">
-              <div
-                v-for="num in calledNumbers.slice(-5).reverse()"
-                :key="num"
-                class="recent-ball"
-                :class="getBallColor(num)"
-              >
+              <div v-for="num in calledNumbers.slice(-5).reverse()" :key="num" class="recent-ball"
+                :class="getBallColor(num)">
                 {{ num }}
               </div>
             </div>
 
             <!-- Pattern Selection -->
-            <v-select
-              v-model="currentPattern"
-              :items="patterns"
-              label="Current Pattern"
-              class="mt-4"
-              v-if="canManageRoom"
-              :disabled="gameStatus !== 'idle'"
-            ></v-select>
+            <v-select v-model="currentPattern" :items="patterns" label="Current Pattern" class="mt-4"
+              v-if="canManageRoom" disabled></v-select>
 
             <v-chip class="mt-2" color="info" v-else>
               Pattern: {{ currentPattern }}
             </v-chip>
 
             <!-- Pattern Preview Toggle Button -->
-            <v-btn
-              v-if="canManageRoom"
-              @click="showPatternPreview = !showPatternPreview"
-              variant="outlined"
-              size="small"
-              class="mt-2"
-              block
-              color="primary"
-            >
+            <v-btn v-if="canManageRoom" @click="showPatternPreview = !showPatternPreview" variant="outlined"
+              size="small" class="mt-2" block color="primary">
               <v-icon class="mr-1">{{ showPatternPreview ? 'mdi-eye-off' : 'mdi-eye' }}</v-icon>
               {{ showPatternPreview ? 'Hide' : 'Show' }} Pattern Preview
             </v-btn>
@@ -94,7 +222,7 @@
                   <span v-else-if="currentPattern === 'fullhouse'">✓ All 25 cells must be marked</span>
                   <span v-else>Match the highlighted pattern to win</span>
                 </p>
-                
+
                 <!-- B-I-N-G-O Header -->
                 <div class="pattern-card-header">
                   <div class="pattern-header-letter letter-b">B</div>
@@ -103,20 +231,15 @@
                   <div class="pattern-header-letter letter-g">G</div>
                   <div class="pattern-header-letter letter-o">O</div>
                 </div>
-                
+
                 <!-- 5x5 Grid with Numbers -->
                 <table class="pattern-grid">
                   <tbody>
                     <tr v-for="row in 5" :key="row">
-                      <td
-                        v-for="col in 5"
-                        :key="col"
-                        class="pattern-cell"
-                        :class="{ 
-                          'pattern-active': isPatternCell(row - 1, col - 1, currentPattern),
-                          'pattern-free': row === 3 && col === 3
-                        }"
-                      >
+                      <td v-for="col in 5" :key="col" class="pattern-cell" :class="{
+                        'pattern-active': isPreviewPatternCell(row - 1, col - 1, currentPattern),
+                        'pattern-free': row === 3 && col === 3
+                      }">
                         <span v-if="row === 3 && col === 3">FREE</span>
                         <span v-else>{{ getStaticCardNumber(row - 1, col - 1) }}</span>
                       </td>
@@ -129,155 +252,14 @@
         </v-card>
 
         <!-- Language and Volume Controls -->
-        <v-card class="mb-4">
+        <v-card class="mb-4 sidebar-card voice-card">
           <v-card-title class="text-subtitle-1 bg-primary">
             <v-icon class="mr-2">mdi-volume-high</v-icon>
             Voice Settings
           </v-card-title>
           <v-card-text class="pa-3">
-            <LanguageSelector 
-              @language-changed="handleLanguageChange"
-              class="mb-3"
-            />
-            <VolumeControl 
-              @volume-changed="handleVolumeChange"
-            />
-          </v-card-text>
-        </v-card>
-
-        <!-- Admin Controls -->
-        <v-card v-if="canManageRoom" class="mb-4">
-          <v-card-title class="bg-error">
-            <v-icon>mdi-cog</v-icon>
-            Game Controls
-          </v-card-title>
-          <v-card-text>
-            <!-- Calling Speed Control -->
-            <v-card variant="tonal" color="info" class="mb-3" v-if="gameStatus !== 'idle'">
-              <v-card-text class="pa-3">
-                <div class="d-flex align-center justify-space-between mb-2">
-                  <span class="text-subtitle-2 font-weight-bold">
-                    <v-icon size="small" class="mr-1">mdi-speedometer</v-icon>
-                    Calling Speed
-                  </span>
-                  <v-chip size="small" color="primary">
-                    {{ callingSpeedLabel }}
-                  </v-chip>
-                </div>
-                <v-slider
-                  v-model="callingSpeed"
-                  :min="1000"
-                  :max="5000"
-                  :step="500"
-                  thumb-label="always"
-                  color="primary"
-                  @update:model-value="changeCallingSpeed"
-                  :disabled="gameStatus !== 'playing'"
-                >
-                  <template v-slot:thumb-label="{ modelValue }">
-                    {{ (modelValue / 1000).toFixed(1) }}s
-                  </template>
-                </v-slider>
-                <div class="d-flex justify-space-between text-caption text-grey">
-                  <span>Fast (1s)</span>
-                  <span>Normal (3s)</span>
-                  <span>Slow (5s)</span>
-                </div>
-              </v-card-text>
-            </v-card>
-
-            <v-btn
-              color="success"
-              block
-              @click="startNewGame"
-              :disabled="gameStatus === 'playing' || registeredCards.length === 0"
-              class="mb-2"
-            >
-              <v-icon>mdi-play</v-icon>
-              Start Game
-            </v-btn>
-
-            <v-btn
-              color="warning"
-              block
-              @click="pauseGame"
-              v-if="gameStatus === 'playing'"
-              class="mb-2"
-            >
-              <v-icon>mdi-pause</v-icon>
-              Pause (BINGO Called!)
-            </v-btn>
-
-            <v-btn
-              color="primary"
-              block
-              @click="resumeGame"
-              v-if="gameStatus === 'paused' && matchWinners.length === 0"
-              class="mb-2"
-            >
-              <v-icon>mdi-play</v-icon>
-              Resume
-            </v-btn>
-
-            <v-btn
-              color="success"
-              block
-              @click="finishGame"
-              v-if="gameStatus === 'paused' && matchWinners.length > 0"
-              class="mb-2"
-              size="large"
-            >
-              <v-icon>mdi-flag-checkered</v-icon>
-              Finish Game ({{ matchWinners.length }} Winner{{ matchWinners.length > 1 ? 's' : '' }})
-            </v-btn>
-
-            <v-divider class="my-4"></v-divider>
-
-            <v-btn
-              color="error"
-              block
-              @click="resetGame"
-              class="mb-2"
-              :disabled="gameStatus === 'playing' && calledNumbers.length < 75"
-            >
-              <v-icon>mdi-refresh</v-icon>
-              {{ gameStatus === 'idle' ? 'Reset Game' : 'Back to Card Selection' }}
-            </v-btn>
-
-            <v-divider class="my-4"></v-divider>
-
-            <!-- Betting Configuration Button -->
-            <v-btn
-              color="primary"
-              block
-              @click="showBettingModal = true"
-              v-if="gameStatus === 'idle'"
-              class="mb-2"
-            >
-              <v-icon>mdi-currency-usd</v-icon>
-              Betting Settings
-            </v-btn>
-
-            <v-btn
-              color="deep-purple"
-              block
-              @click="openShuffleRing"
-              v-if="gameStatus === 'idle'"
-              class="mb-2"
-            >
-              <v-icon>mdi-atom-variant</v-icon>
-              Shuffle 75 Balls
-            </v-btn>
-
-            <v-btn
-              v-if="isAdmin"
-              color="secondary"
-              block
-              @click="showUserManagement = !showUserManagement"
-            >
-              <v-icon>mdi-account-group</v-icon>
-              {{ showUserManagement ? 'Hide' : 'Show' }} User Management
-            </v-btn>
+            <LanguageSelector @language-changed="handleLanguageChange" class="mb-3" />
+            <VolumeControl @volume-changed="handleVolumeChange" />
           </v-card-text>
         </v-card>
 
@@ -290,33 +272,17 @@
             </v-card-title>
 
             <v-card-text class="pa-6">
-              <v-text-field
-                v-model.number="betAmount"
-                label="Bet Amount per Card (Birr)"
-                type="number"
-                variant="outlined"
-                prepend-inner-icon="mdi-currency-usd"
-                min="0"
-                hint="Amount each player pays per card"
-                persistent-hint
-                class="mb-4 betting-input"
-              ></v-text-field>
+              <v-text-field v-model.number="betAmount" label="Bet Amount per Card (Birr)" type="number"
+                variant="outlined" prepend-inner-icon="mdi-currency-usd" min="0" hint="Amount each player pays per card"
+                persistent-hint class="mb-4 betting-input"></v-text-field>
 
-              <v-text-field
-                v-model.number="houseFee"
-                label="House Fee per Card (Birr)"
-                type="number"
-                variant="outlined"
-                prepend-inner-icon="mdi-home"
-                min="0"
-                hint="Fee deducted per card"
-                persistent-hint
-                class="betting-input"
-              ></v-text-field>
+              <v-select v-model="houseFee" :items="houseFeeOptions" item-title="title" item-value="value"
+                label="House Fee per Card (%)" prepend-inner-icon="mdi-percent" variant="outlined"
+                hint="Choose a commission from 20% to 100%" persistent-hint class="betting-input"></v-select>
 
               <v-alert type="info" density="compact" class="mt-4">
                 <strong>Current Settings:</strong><br>
-                Bet: {{ betAmount }} Birr | Fee: {{ houseFee }} Birr
+                Bet: {{ betAmount }} Birr | Commission: {{ houseFee }}%
               </v-alert>
             </v-card-text>
 
@@ -333,80 +299,12 @@
           </v-card>
         </v-dialog>
 
-        <!-- Circular Shuffle Ring Modal -->
-        <v-dialog v-model="showShuffleRingModal" max-width="650" class="shuffle-dialog">
-          <div class="shuffle-ring-container">
-            <div class="shuffle-ring-wrapper">
-              <div class="shuffle-ring-boundary"></div>
-              <div
-                v-for="ball in ringBalls"
-                :key="ball.number"
-                class="ring-ball"
-                :class="[getBallColor(ball.number), { moving: ringShuffleActive }]"
-                :style="{
-                  transform: `translate(${ball.x}px, ${ball.y}px)`,
-                  transitionDuration: `${ball.duration}ms`,
-                }"
-              >
-                {{ ball.number }}
-              </div>
-            </div>
-            <div class="shuffle-actions">
-              <v-btn 
-                color="red-darken-2" 
-                variant="elevated" 
-                size="x-large" 
-                @click="closeShuffleRing"
-                prepend-icon="mdi-close-circle"
-              >
-                Close
-              </v-btn>
-              <v-btn 
-                color="deep-purple" 
-                variant="elevated" 
-                size="x-large" 
-                @click="startRingShuffleMotion(10000)"
-                prepend-icon="mdi-shuffle-variant"
-              >
-                Shuffle Again
-              </v-btn>
-            </div>
-          </div>
-        </v-dialog>
       </v-col>
 
       <!-- Center Panel: Card Selection & Calling History -->
       <v-col cols="12" lg="9" md="8" class="right-panel">
-        <!-- Floating Pause Button (when playing) -->
-        <div v-if="canManageRoom && gameStatus === 'playing'" class="floating-pause-container">
-          <v-card class="floating-pause-card" elevation="8">
-            <v-card-text class="pa-4">
-              <v-row align="center" no-gutters>
-                <v-col class="grow">
-                  <div class="pause-alert-text">
-                    <v-icon color="warning" size="large" class="mr-2">mdi-alert-circle</v-icon>
-                    <span><strong>Game in Progress!</strong> Click PAUSE when someone calls BINGO</span>
-                  </div>
-                </v-col>
-                <v-col class="shrink ml-4">
-                  <v-btn 
-                    color="warning" 
-                    variant="elevated" 
-                    @click="pauseGame"
-                    size="x-large"
-                    class="pause-btn-prominent"
-                  >
-                    <v-icon class="mr-2" size="large">mdi-pause-circle</v-icon>
-                    PAUSE
-                  </v-btn>
-                </v-col>
-              </v-row>
-            </v-card-text>
-          </v-card>
-        </div>
-
         <!-- Floating Game Ended Button (when all numbers called) -->
-        <div v-if="canManageRoom && calledNumbers.length >= 75 && gameStatus !== 'idle'" class="floating-pause-container">
+        <div v-if="canManageRoom && calledNumbers.length >= 75" class="floating-pause-container">
           <v-card class="floating-pause-card floating-end-card" elevation="8">
             <v-card-text class="pa-4">
               <v-row align="center" no-gutters>
@@ -417,12 +315,7 @@
                   </div>
                 </v-col>
                 <v-col class="shrink ml-4">
-                  <v-btn 
-                    color="error" 
-                    variant="elevated" 
-                    @click="resetGame"
-                    size="large"
-                  >
+                  <v-btn color="error" variant="elevated" @click="resetGame" size="large">
                     <v-icon class="mr-2">mdi-refresh</v-icon>
                     New Game
                   </v-btn>
@@ -431,46 +324,6 @@
             </v-card-text>
           </v-card>
         </div>
-        <!-- Card Selection Grid - Only visible when game is idle -->
-        <v-card class="card-selection-card mb-4" v-if="canManageRoom && gameStatus === 'idle'">
-          <v-card-title class="card-selection-title">
-            <v-icon class="mr-2">mdi-cards</v-icon>
-            Card Selection & Registration
-            <v-spacer></v-spacer>
-            <!-- Ball-style counter -->
-            <div class="registered-counter-ball">
-              {{ registeredCards.length }}
-            </div>
-          </v-card-title>
-          <v-card-text class="pa-4">
-            <!-- Total Reward Display -->
-            <div class="reward-ball-container mb-4">
-              <div class="reward-label-text">Total Reward</div>
-              <div class="reward-ball">
-                {{ totalReward }}
-              </div>
-              <div class="reward-currency">Birr</div>
-            </div>
-
-            <!-- Card Selection Grid (like calling history) -->
-            <div class="card-selection-grid">
-              <div
-                v-for="cardNum in totalCards"
-                :key="cardNum"
-                class="card-number-cell"
-                :class="{
-                  'card-registered': isCardRegistered(cardNum),
-                  'card-selected': selectedCardForView === cardNum
-                }"
-                @click="toggleCardRegistration(cardNum)"
-                @dblclick="viewCardDetails(cardNum)"
-              >
-                {{ cardNum }}
-              </div>
-            </div>
-          </v-card-text>
-        </v-card>
-
         <!-- Card Details Modal -->
         <v-dialog v-model="showCardDetailsModal" max-width="500">
           <v-card class="card-details-card">
@@ -478,16 +331,11 @@
               <v-icon class="mr-2">mdi-card-account-details</v-icon>
               Card #{{ selectedCardForView }}
               <v-spacer></v-spacer>
-              <v-btn
-                icon
-                size="small"
-                variant="text"
-                @click="
-                  showCardDetailsModal = false;
-                  selectedCardForView = null;
-                  selectedCardGrid = null;
-                "
-              >
+              <v-btn icon size="small" variant="text" @click="
+                showCardDetailsModal = false;
+              selectedCardForView = null;
+              selectedCardGrid = null;
+              ">
                 <v-icon>mdi-close</v-icon>
               </v-btn>
             </v-card-title>
@@ -503,15 +351,10 @@
                 <table class="detail-bingo-card">
                   <tbody>
                     <tr v-for="row in 5" :key="row">
-                      <td
-                        v-for="col in 5"
-                        :key="col"
-                        class="detail-card-cell"
-                        :class="{
-                          'free-space': row === 3 && col === 3,
-                          'winning-marked': isWinningPatternCell(row - 1, col - 1),
-                        }"
-                      >
+                      <td v-for="col in 5" :key="col" class="detail-card-cell" :class="{
+                        'free-space': row === 3 && col === 3,
+                        'winning-marked': isWinningPatternCell(row - 1, col - 1),
+                      }">
                         <span v-if="row === 3 && col === 3">FREE</span>
                         <span v-else>{{ getCardCellValue(row - 1, col - 1) }}</span>
                       </td>
@@ -522,10 +365,7 @@
                   <v-chip color="indigo" variant="elevated">
                     Card #{{ selectedCardForView }}
                   </v-chip>
-                  <v-chip
-                    :color="isCardRegistered(selectedCardForView || 0) ? 'success' : 'grey'"
-                    variant="elevated"
-                  >
+                  <v-chip :color="isCardRegistered(selectedCardForView || 0) ? 'success' : 'grey'" variant="elevated">
                     {{ isCardRegistered(selectedCardForView || 0) ? 'Registered' : 'Not Registered' }}
                   </v-chip>
                 </div>
@@ -534,92 +374,152 @@
           </v-card>
         </v-dialog>
 
-        <!-- Calling History - Only visible when game is playing or paused -->
-        <v-card class="history-card" v-if="gameStatus !== 'idle'">
-          <v-card-title class="history-title">
-            <v-icon class="mr-2">mdi-history</v-icon>
-            Calling History ({{ calledNumbers.length }}/75 numbers)
-            <v-spacer></v-spacer>
-            <!-- Reward Info During Game -->
-            <v-chip color="success" variant="elevated" size="large">
-              <v-icon start>mdi-trophy</v-icon>
-              Prize: {{ totalReward }} Birr
-            </v-chip>
-          </v-card-title>
-          <v-card-text class="history-content">
-            <div class="history-grid">
-              <div
-                v-for="num in 75"
-                :key="num"
-                class="history-number"
-                :class="{
-                  [getBallColor(num)]: isNumberCalled(num),
-                  'uncalled': !isNumberCalled(num)
-                }"
-              >
-                {{ num }}
+        <!-- TV Bingo Board - Only visible when game is playing or paused -->
+        <v-card class="tv-bingo-board mb-4" :class="{ 'tv-bingo-board--shuffling': boardShuffleActive }">
+          <!-- Top Grid Section -->
+          <div class="tv-board-main">
+            <!-- Vertical B-I-N-G-O Header Strip -->
+            <div class="tv-bingo-sidebar">
+              <div v-for="letter in bingoLetters" :key="letter" class="tv-sidebar-letter">
+                {{ letter }}
               </div>
             </div>
-          </v-card-text>
-        </v-card>
 
-        <!-- Verification Section - Below History Card -->
-        <v-card class="verify-card mt-4" v-if="canManageRoom && gameStatus === 'paused'">
-          <v-card-title class="verify-title">
-            <v-icon class="mr-2">mdi-check-decagram</v-icon>
-            Verify BINGO
-          </v-card-title>
-          <v-card-text class="pa-4">
-            <v-text-field
-              v-model="verifyCardNumber"
-              label="Card Number"
-              placeholder="Enter card number (e.g., 1 or CARD-001)"
-              variant="outlined"
-              density="comfortable"
-              class="mb-3"
-              prepend-inner-icon="mdi-card-account-details"
-            ></v-text-field>
+            <!-- 5x15 Numbers Matrix -->
+            <div class="tv-numbers-grid">
+              <div v-for="(letter, rowIndex) in bingoLetters" :key="letter" class="tv-grid-row">
+                <div v-for="offset in 15" :key="`${letter}-${offset}`" class="tv-grid-cell" :class="{
+                  'tv-cell--called': isNumberCalled(rowIndex * 15 + offset),
+                  'tv-cell--latest': lastCalledNumber === (rowIndex * 15 + offset),
+                  'tv-grid-cell--shuffling': boardShuffleActive,
+                  'tv-grid-cell--shuffle-active': boardShuffleActive && shuffleHighlightedNumbers.has(rowIndex * 15 + offset)
+                }">
+                  {{ rowIndex * 15 + offset }}
+                </div>
+              </div>
+            </div>
+          </div>
 
-            <v-btn
-              color="success"
-              block
-              size="large"
-              @click="verifyWin"
-              :loading="verifying"
-              class="mb-3"
-              elevation="2"
-            >
-              <v-icon class="mr-2">mdi-check-circle</v-icon>
-              Verify Win
-            </v-btn>
+          <!-- Multi-Color Progress Divider Line -->
+          <div class="tv-color-progress-bar">
+            <div class="bar-segment bar-blue"></div>
+            <div class="bar-segment bar-green"></div>
+            <div class="bar-segment bar-yellow"></div>
+          </div>
 
-            <v-alert 
-              v-if="verificationResult" 
-              :type="verificationResult.isValid ? 'success' : 'error'" 
-              variant="tonal"
-              prominent
-            >
-              <template v-slot:prepend>
-                <v-icon :icon="verificationResult.isValid ? 'mdi-trophy' : 'mdi-alert-circle'"></v-icon>
-              </template>
-              {{ verificationResult.message }}
-            </v-alert>
-          </v-card-text>
+          <!-- Bottom Control & Dashboard Area -->
+          <div class="tv-board-footer">
+            <!-- Left: Current Ball Display & Last 5 Calls -->
+            <div class="tv-current-ball-container">
+              <div class="tv-current-ball-ring">
+                <div class="tv-current-ball-inner">
+                  <div class="ball-letter-top" v-if="lastCalledNumber">
+                    {{ getBallLetter(lastCalledNumber) }}
+                  </div>
+                  <div class="ball-number-main">
+                    {{ lastCalledNumber || '-' }}
+                  </div>
+                </div>
+              </div>
+              <div class="tv-last-calls-label">Last 5 Calls</div>
+              <div class="tv-recent-balls-row">
+                <div v-for="num in calledNumbers.slice(-5).reverse()" :key="num" class="recent-mini-ball"
+                  :class="getBallColor(num)">
+                  {{ num }}
+                </div>
+              </div>
+            </div>
+
+            <!-- Center: Interactive Controls -->
+            <div class="tv-center-controls" v-if="canManageRoom">
+              <div class="control-btn-stack">
+                <v-btn color="success" variant="flat" size="small" @click="callNextNumber"
+                  v-if="gameStatus === 'playing'" :disabled="calledNumbers.length >= 75">
+                  Call Next Number
+                </v-btn>
+
+                <v-btn :color="gameStatus === 'playing' ? 'grey-lighten-2' : 'success'" variant="flat" size="small"
+                  @click="togglePauseResume" :disabled="shuffleWorkflowActive"
+                  :aria-label="gameStatus === 'playing' ? 'Pause Game' : 'Resume Game'">
+                  <v-icon class="mr-1">{{ gameStatus === 'playing' ? 'mdi-pause' : 'mdi-play' }}</v-icon>
+                  {{ gameStatus === 'playing' ? 'Pause Game' : 'Resume Game' }}
+                </v-btn>
+
+                <v-btn color="red-darken-1" variant="flat" size="small" class="text-white" @click="toggleAutoCall"
+                  :disabled="shuffleWaitActive">
+                  {{ autoCallEnabled ? 'Stop Auto' : 'Auto Call' }}
+                </v-btn>
+
+                <v-btn color="grey-lighten-2" variant="flat" size="small" @click="resetGame"
+                  :disabled="gameStatus === 'playing' && calledNumbers.length < 75">
+                  Reset Board
+                </v-btn>
+
+                <v-btn color="grey-lighten-2" variant="flat" size="small" @click="openShuffleRing"
+                  :disabled="gameStatus !== 'playing' || boardShuffleActive || shuffleWaitActive">
+                  Shuffle
+                </v-btn>
+              </div>
+            </div>
+
+            <div class="tv-board-extra-controls" v-if="canManageRoom">
+              <div class="tv-speed-control">
+                <div class="tv-control-label">Voice Speed</div>
+                <v-slider v-model="callingSpeed" :min="1000" :max="6000" :step="500" hide-details density="compact"
+                  thumb-label color="primary" @update:model-value="autoCallEnabled && startAutoCall()" />
+                <div class="tv-speed-value">{{ (callingSpeed / 1000).toFixed(1) }}s</div>
+              </div>
+              <div class="tv-verify-control">
+                <v-text-field v-model="verifyCardNumber" label="Card number" density="compact" variant="outlined"
+                  hide-details prepend-inner-icon="mdi-card-account-details" />
+                <v-btn color="success" size="small" :loading="verifying" @click="verifyWin">
+                  <v-icon class="mr-1">mdi-check-decagram</v-icon>
+                  Verify Win
+                </v-btn>
+              </div>
+            </div>
+
+            <!-- Right: Game Stats Displays -->
+            <div class="tv-stats-container">
+              <!-- Total Calls Circle -->
+              <div class="tv-stat-circle circle-green">
+                <div class="stat-value">{{ calledNumbers.length }}</div>
+                <div class="stat-label">Total Calls</div>
+              </div>
+
+              <!-- Prev Call Circle -->
+              <div class="tv-stat-circle circle-orange">
+                <div class="stat-value">
+                  <span v-if="calledNumbers.length > 1">
+                    {{ getBallLetter(calledNumbers[calledNumbers.length - 2]) }}{{ calledNumbers[calledNumbers.length -
+                      2] }}
+                  </span>
+                  <span v-else>-</span>
+                </div>
+                <div class="stat-label">Prev. Call</div>
+              </div>
+
+              <!-- Amount Circle -->
+              <div class="tv-stat-circle circle-red-large">
+                <div class="stat-label-top">Amount</div>
+                <div class="stat-value-large">{{ totalReward }}</div>
+              </div>
+            </div>
+          </div>
         </v-card>
 
         <!-- Winning Pattern Visualization (when valid win OR late claim) -->
-        <v-card 
-          class="winning-pattern-card mt-4" 
+        <v-card class="winning-pattern-card mt-4"
           :class="{ 'late-claim-card': verificationResult && verificationResult.lateClaim }"
-          v-if="verificationResult && (verificationResult.isValid || verificationResult.lateClaim)"
-        >
+          v-if="verificationResult && (verificationResult.isValid || verificationResult.lateClaim)">
           <v-card-title class="winning-title" :class="{ 'late-claim-title': verificationResult.lateClaim }">
             <v-icon class="mr-2">{{ verificationResult.lateClaim ? 'mdi-clock-alert' : 'mdi-trophy' }}</v-icon>
             <span v-if="verificationResult.lateClaim" style="color: #d32f2f;">
               LATE CLAIM - Pattern Completed Earlier
             </span>
             <span v-else-if="verificationResult.patternNames && verificationResult.patternNames.length > 1">
-              Winning Patterns ({{ verificationResult.patternNames.length }}): {{ verificationResult.patternNames.join(', ') }}
+              Winning Patterns ({{ verificationResult.patternNames.length }}): {{
+                verificationResult.patternNames.join(', ') }}
             </span>
             <span v-else-if="verificationResult.patternNames && verificationResult.patternNames.length === 1">
               Winning Pattern: {{ verificationResult.patternNames[0] }}
@@ -629,38 +529,22 @@
             </span>
           </v-card-title>
           <v-card-text class="pa-4">
-            <v-alert 
-              v-if="verificationResult.lateClaim" 
-              type="error" 
-              variant="tonal" 
-              density="compact"
-              class="mb-3"
-            >
+            <v-alert v-if="verificationResult.lateClaim" type="error" variant="tonal" density="compact" class="mb-3">
               <v-icon class="mr-2">mdi-alert-circle</v-icon>
               This pattern was completed earlier. You must call BINGO immediately when you win!
             </v-alert>
-            <v-alert 
-              v-else-if="verificationResult.patternNames && verificationResult.patternNames.length > 1" 
-              type="success" 
-              variant="tonal" 
-              density="compact"
-              class="mb-3"
-            >
+            <v-alert v-else-if="verificationResult.patternNames && verificationResult.patternNames.length > 1"
+              type="success" variant="tonal" density="compact" class="mb-3">
               <v-icon class="mr-2">mdi-star-circle</v-icon>
               This card matches {{ verificationResult.patternNames.length }} different winning patterns!
             </v-alert>
             <table class="winning-grid">
               <tbody>
                 <tr v-for="row in 5" :key="row">
-                  <td
-                    v-for="col in 5"
-                    :key="col"
-                    class="winning-cell"
-                    :class="{
-                      'winning-marked': isWinningPatternCell(row - 1, col - 1),
-                      'free-space': row === 3 && col === 3
-                    }"
-                  >
+                  <td v-for="col in 5" :key="col" class="winning-cell" :class="{
+                    'winning-marked': isWinningPatternCell(row - 1, col - 1),
+                    'free-space': row === 3 && col === 3
+                  }">
                     {{ row === 3 && col === 3 ? 'FREE' : getWinningCardCellValue(row - 1, col - 1) }}
                   </td>
                 </tr>
@@ -671,20 +555,12 @@
 
         <!-- User Management (Admin Only) -->
         <div v-if="isAdmin && showUserManagement" class="mt-4">
-          <UserManagement
-            :room-id="roomId"
-            @cards-assigned="onCardsAssigned"
-          />
+          <UserManagement :room-id="roomId" @cards-assigned="onCardsAssigned" />
         </div>
       </v-col>
     </v-row>
 
-    <v-snackbar
-      v-model="toast.show"
-      :color="toast.color"
-      location="top right"
-      timeout="4500"
-    >
+    <v-snackbar v-model="toast.show" :color="toast.color" location="top right" timeout="4500">
       {{ toast.message }}
     </v-snackbar>
 
@@ -711,14 +587,10 @@
       </v-card>
     </v-dialog>
   </div>
-  
+
   <!-- Loading State -->
   <div v-else class="loading-container">
-    <v-progress-circular
-      indeterminate
-      color="primary"
-      size="64"
-    ></v-progress-circular>
+    <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
     <p class="mt-4 text-white">Loading room...</p>
   </div>
 </template>
@@ -735,7 +607,6 @@ import UserManagement from '@/components/UserManagement.vue';
 import LanguageSelector from '@/components/LanguageSelector.vue';
 import VolumeControl from '@/components/VolumeControl.vue';
 import { getAmharicAudioService } from '@/services/AmharicAudioService';
-import { END_MATCH_EVENT } from '@/constants/socketEvents';
 import type { Room, RoomManager } from '@/types/room';
 import type { MatchNumber } from '@/types/match';
 import type { VerificationResult } from '@/types/verification';
@@ -754,52 +625,63 @@ const room = ref<Room | null>(null);
 const lastCalledNumber = ref<number>(0);
 const calledNumbers = ref<number[]>([]);
 const gameStatus = ref<'idle' | 'playing' | 'paused'>('idle');
-const currentPattern = ref('horizontal');
-const selectedPatternForMatch = ref('horizontal');
+const currentPattern = ref('twoline');
+const selectedPatternForMatch = ref('twoline');
 const showUserManagement = ref(false);
 const showPatternPreview = ref(false); // Collapsed by default
+const showPatternSettings = ref(false);
 const showLogoutDialog = ref(false);
 const verifyCardNumber = ref('');
 const verifying = ref(false);
 const verificationResult = ref<VerificationResult | null>(null);
 const matchWinners = ref<Array<{ cardNumber: string; timestamp: Date; specialWin?: boolean }>>([]); // Track all winners for current match
-const totalCards = ref(400); // Total number of cards available (400 cards)
 const registeredCards = ref<number[]>([]); // Array of registered card numbers
+const cardCatalog = ref<number[]>([]);
 const selectedCardForView = ref<number | null>(null); // Card selected for viewing details
 const betAmount = ref(10); // Bet amount per card in Birr
-const houseFee = ref(2); // House fee per card in Birr
+const houseFee = ref(20); // House fee percentage per card
+const houseFeeOptions = Array.from({ length: 17 }, (_, index) => {
+  const value = 20 + index * 5;
+  return { title: `${value}%`, value };
+});
 const showBettingModal = ref(false); // Show/hide betting configuration modal
 const selectedCardGrid = ref<number[][] | null>(null);
 
 // Calling speed control
 const callingSpeed = ref(3000); // Default 3 seconds
-const callingSpeedLabel = computed(() => {
-  const speed = callingSpeed.value / 1000;
-  if (speed <= 1.5) return 'Very Fast';
-  if (speed <= 2.5) return 'Fast';
-  if (speed <= 3.5) return 'Normal';
-  if (speed <= 4.5) return 'Slow';
-  return 'Very Slow';
-});
 const canManageRoomByApi = ref(false);
 const showCardDetailsModal = ref(false);
-const showShuffleRingModal = ref(false);
-type RingBall = { number: number; x: number; y: number; duration: number };
-const ringBalls = ref<RingBall[]>([]);
-const ringShuffleActive = ref(false);
-let ringShuffleInterval: number | null = null;
-let ringShuffleTimeout: number | null = null;
+const shuffleHighlightedNumbers = ref<Set<number>>(new Set());
+const boardShuffleActive = ref(false);
+const shuffleWaitActive = ref(false);
+let shuffleBoardInterval: number | null = null;
+let shuffleWaitTimeout: number | null = null;
+let shuffleHighlightQueue: number[] = [];
 const toast = ref<{ show: boolean; message: string; color: string }>({
   show: false,
   message: '',
   color: 'info',
 });
 
+// Auto-call functionality
+const autoCallEnabled = ref(false);
+let autoCallTimer: number | null = null;
+let initialCallTimeout: number | null = null;
+
+const SHUFFLE_DURATION_MS = 20000;
+const SHUFFLE_WAIT_MS = 5000;
+
+const shuffleWorkflowActive = computed(
+  () => boardShuffleActive.value || shuffleWaitActive.value,
+);
+
 // Language and audio support
-const currentLanguage = ref(localStorage.getItem('voiceLanguage') || 'en');
+const currentLanguage = ref(localStorage.getItem('voiceLanguage') || 'am');
 const amharicAudio = getAmharicAudioService();
 
 const patterns = [
+  { title: 'Two Lines (Horizontal, Vertical, or Diagonal)', value: 'twoline' },
+  { title: 'Three Lines (Horizontal, Vertical, or Diagonal)', value: 'threeline' },
   { title: 'Any Line (Horizontal, Vertical, or Diagonal)', value: 'anyline' },
   { title: 'Horizontal Line (Any Row)', value: 'horizontal' },
   { title: 'Vertical Line (Any Column)', value: 'vertical' },
@@ -811,23 +693,25 @@ const patterns = [
   { title: 'Full House (All Cells)', value: 'fullhouse' },
 ];
 
+const bingoLetters = ['B', 'I', 'N', 'G', 'O'];
+
 const canManageRoom = computed(() => {
   if (canManageRoomByApi.value) return true;
   if (!room.value || !user) return false;
-  
+
   // Admin can manage any room
   if (user.role === 'admin') return true;
-  
+
   // Owner can manage their room
   if (room.value.owner?.id === user.id) return true;
-  
+
   // Check if user is assigned as manager
   if (room.value.managers) {
     return room.value.managers.some(
       (m: RoomManager) => m.user?.id === user.id,
     );
   }
-  
+
   return false;
 });
 
@@ -841,8 +725,13 @@ const activePattern = computed(() =>
 
 const totalReward = computed(() => {
   const totalBet = registeredCards.value.length * betAmount.value;
-  const totalFee = registeredCards.value.length * houseFee.value;
+  const totalFee = totalBet * (houseFee.value / 100);
   return Math.max(0, totalBet - totalFee);
+});
+
+const cardNumbers = computed(() => {
+  const displayLimit = room.value?.cardDisplayLimit || 400;
+  return cardCatalog.value.filter((cardNumber) => cardNumber <= displayLimit);
 });
 
 const getBallLetter = (num: number): string => {
@@ -899,35 +788,23 @@ const showToast = (message: string, color = 'info') => {
 
 const speakMessage = async (message: string) => {
   console.log(`[Audio Debug] speakMessage called with: "${message}", language: ${currentLanguage.value}`);
-  
+
   if (currentLanguage.value === 'am') {
     // Use Amharic audio for specific messages
     const eventMap: Record<string, string> = {
       'Congratulations': 'congratulations',
-      'Invalid win': 'winner-invalid',
       'Invalid claim': 'card-locked',
       'Late claim rejected': 'winner-invalid',
       'must call BINGO immediately': 'winner-invalid',
       'Starting new game': 'game-start',
-      'Game started': 'game-start',
-      'started successfully': 'game-start',
-      'Good luck everyone': 'game-start',
       'Game paused': 'game-paused',
-      'BINGO called': 'game-paused',
-      'paused for BINGO': 'game-paused',
       'Game resumed': 'game-resumed',
-      'Continuing to call': 'game-resumed',
-      'Please register': 'please-wait',
       'Card locked': 'card-locked',
       'locked due to': 'card-locked',
       'card is now locked': 'card-locked',
-      'valid': 'winner-valid',
       'Invalid': 'winner-invalid',
-      'Failed to verify': 'try-again',
-      'Failed to save': 'try-again',
-      'Room loaded': 'new-game',
     };
-    
+
     // Find matching event
     const eventKey = Object.keys(eventMap).find(key => message.includes(key));
     if (eventKey) {
@@ -940,7 +817,7 @@ const speakMessage = async (message: string) => {
       }
       return;
     }
-    
+
     // If no specific match, try to determine event type
     if (message.toLowerCase().includes('congratulations') || message.toLowerCase().includes('wins')) {
       console.log(`[Audio Debug] ✅ Playing Amharic congratulations for: "${message}"`);
@@ -952,15 +829,10 @@ const speakMessage = async (message: string) => {
       await amharicAudio.playEvent('winner-invalid');
       return;
     }
-    if (message.toLowerCase().includes('failed') || message.toLowerCase().includes('error')) {
-      console.log(`[Audio Debug] ✅ Playing Amharic try-again for: "${message}"`);
-      await amharicAudio.playEvent('try-again');
-      return;
-    }
-    
+
     console.log(`[Audio Debug] ⚠️ No Amharic mapping found for message: "${message}"`);
   }
-  
+
   // Fallback to English Web Speech API
   try {
     console.log(`[Audio Debug] Using English Web Speech API for: "${message}"`);
@@ -977,10 +849,10 @@ const speakMessage = async (message: string) => {
 
 const announceNumber = async (letter: string, number: number) => {
   console.log(`[Audio Debug] announceNumber called: ${letter}-${number}, language: ${currentLanguage.value}`);
-  
+
   // REMOVED: Special milestone announcements (10/75, 25/75, etc.)
   // These count announcements have been removed per user request
-  
+
   if (currentLanguage.value === 'am') {
     try {
       console.log(`[Audio Debug] ✅ Playing Amharic number: ${letter}-${number}`);
@@ -1035,7 +907,7 @@ const getWinningPatternDetails = (): string => {
   // Check if we have multiple patterns
   const winningPatterns = verificationResult.value?.winningPatterns;
   const patternNames = verificationResult.value?.patternNames;
-  
+
   if (Array.isArray(winningPatterns) && winningPatterns.length > 0 && Array.isArray(patternNames)) {
     // Multiple patterns - show all pattern names
     if (winningPatterns.length > 1) {
@@ -1044,7 +916,7 @@ const getWinningPatternDetails = (): string => {
     // Single pattern with name
     return patternNames[0] || '';
   }
-  
+
   // Fallback to old single pattern format
   const winningPattern = verificationResult.value?.winningPattern;
   if (!Array.isArray(winningPattern) || winningPattern.length === 0) {
@@ -1081,106 +953,103 @@ const toggleCardRegistration = (cardNum: number) => {
   }
 };
 
-const randomPointInRing = (): { x: number; y: number } => {
-  const radius = 210;
-  const angle = Math.random() * Math.PI * 2;
-  const distance = Math.sqrt(Math.random()) * radius;
-  const centerOffset = 229;
-  return {
-    x: centerOffset + Math.cos(angle) * distance,
-    y: centerOffset + Math.sin(angle) * distance,
-  };
-};
-
-const initializeRingBalls = () => {
-  ringBalls.value = Array.from({ length: 75 }, (_, idx) => {
-    const point = randomPointInRing();
-    return {
-      number: idx + 1,
-      x: point.x,
-      y: point.y,
-      duration: 320 + (idx % 8) * 35,
-    };
-  });
-};
-
-const shuffleRingPositions = () => {
-  ringBalls.value = ringBalls.value.map((ball, index) => {
-    const point = randomPointInRing();
-    return {
-      ...ball,
-      x: point.x,
-      y: point.y,
-      duration: 250 + ((index + Math.floor(Math.random() * 10)) % 9) * 40,
-    };
-  });
-};
-
-const stopRingShuffleMotion = () => {
-  ringShuffleActive.value = false;
-  if (ringShuffleInterval !== null) {
-    window.clearInterval(ringShuffleInterval);
-    ringShuffleInterval = null;
-  }
-  if (ringShuffleTimeout !== null) {
-    window.clearTimeout(ringShuffleTimeout);
-    ringShuffleTimeout = null;
-  }
-};
-
-const startRingShuffleMotion = (durationMs = 10000) => {
-  if (ringBalls.value.length !== 75) {
-    initializeRingBalls();
-  }
-  stopRingShuffleMotion();
-  ringShuffleActive.value = true;
-  
-  // Play shuffle sound
-  playShuffleSound();
-  
-  ringShuffleInterval = window.setInterval(shuffleRingPositions, 320);
-  ringShuffleTimeout = window.setTimeout(() => {
-    stopRingShuffleMotion();
-  }, durationMs);
-};
-
-const playShuffleSound = () => {
+const playShuffleSound = async () => {
   try {
-    // Create a simple shuffle sound using Web Audio API
-    const AudioCtx =
-      window.AudioContext ||
-      (window as Window & { webkitAudioContext?: typeof AudioContext })
-        .webkitAudioContext;
-    if (!AudioCtx) return;
-    const audioContext = new AudioCtx();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    
-    oscillator.type = 'sine';
-    oscillator.frequency.setValueAtTime(400, audioContext.currentTime);
-    oscillator.frequency.exponentialRampToValueAtTime(200, audioContext.currentTime + 0.3);
-    
-    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-    
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.3);
+    await amharicAudio.playShuffle();
   } catch (error) {
-    console.log('Audio not supported:', error);
+    console.warn('Recorded shuffle audio is unavailable:', error);
   }
 };
 
 const openShuffleRing = () => {
-  showShuffleRingModal.value = true;
-  startRingShuffleMotion(10000);
+  if (gameStatus.value !== 'playing' || boardShuffleActive.value || shuffleWaitActive.value) return;
+
+  void playShuffleSound();
+  stopAutoCall();
+  if (initialCallTimeout !== null) {
+    window.clearTimeout(initialCallTimeout);
+    initialCallTimeout = null;
+  }
+
+  // Pause server-side extraction while the board is only showing animation.
+  socketStore.client?.emit('pause-match', {
+    matchId: room.value?.currentMatch?.id,
+    roomId: roomId.value,
+  });
+  gameStatus.value = 'paused';
+
+  startBoardShuffleMotion();
+  initialCallTimeout = window.setTimeout(() => {
+    initialCallTimeout = null;
+    beginShuffleWait();
+  }, SHUFFLE_DURATION_MS);
 };
 
-const closeShuffleRing = () => {
-  showShuffleRingModal.value = false;
-  stopRingShuffleMotion();
+const stopBoardShuffleMotion = () => {
+  if (shuffleBoardInterval !== null) {
+    window.clearInterval(shuffleBoardInterval);
+    shuffleBoardInterval = null;
+  }
+  boardShuffleActive.value = false;
+  shuffleHighlightedNumbers.value = new Set();
+  shuffleHighlightQueue = [];
+};
+
+const startBoardShuffleMotion = () => {
+  stopBoardShuffleMotion();
+  boardShuffleActive.value = true;
+  shuffleHighlightQueue = Array.from({ length: 75 }, (_, index) => index + 1);
+  shuffleBoardInterval = window.setInterval(() => {
+    if (shuffleHighlightQueue.length === 0) {
+      shuffleHighlightQueue = Array.from({ length: 75 }, (_, index) => index + 1);
+    }
+
+    for (let index = shuffleHighlightQueue.length - 1; index > 0; index -= 1) {
+      const randomIndex = Math.floor(Math.random() * (index + 1));
+      [shuffleHighlightQueue[index], shuffleHighlightQueue[randomIndex]] = [
+        shuffleHighlightQueue[randomIndex],
+        shuffleHighlightQueue[index],
+      ];
+    }
+
+    shuffleHighlightedNumbers.value = new Set(shuffleHighlightQueue.splice(0, 8));
+  }, 180);
+};
+
+const beginShuffleWait = () => {
+  stopBoardShuffleMotion();
+
+  if (shuffleWaitTimeout !== null) {
+    window.clearTimeout(shuffleWaitTimeout);
+  }
+
+  shuffleWaitActive.value = true;
+  shuffleWaitTimeout = window.setTimeout(() => {
+    shuffleWaitTimeout = null;
+    shuffleWaitActive.value = false;
+
+    if (gameStatus.value !== 'paused') return;
+
+    socketStore.client?.emit('play-match', {
+      matchId: room.value?.currentMatch?.id,
+      roomId: roomId.value,
+    });
+    gameStatus.value = 'playing';
+    autoCallEnabled.value = true;
+    callNextNumber();
+    startAutoCall();
+  }, SHUFFLE_WAIT_MS);
+};
+
+const cancelShuffleWorkflow = () => {
+  stopBoardShuffleMotion();
+
+  if (shuffleWaitTimeout !== null) {
+    window.clearTimeout(shuffleWaitTimeout);
+    shuffleWaitTimeout = null;
+  }
+
+  shuffleWaitActive.value = false;
 };
 
 const viewCardDetails = async (cardNum: number): Promise<void> => {
@@ -1255,7 +1124,6 @@ const startNewGame = async () => {
   if (registeredCards.value.length === 0) {
     const message = 'Please register at least one card before starting the game.';
     showToast(message, 'warning');
-    speakMessage(message);
     return;
   }
 
@@ -1271,33 +1139,37 @@ const startNewGame = async () => {
   }
 
   selectedPatternForMatch.value = currentPattern.value;
-  
+
   // Announce game start and pattern
   const patternTitle = getPatternTitle(currentPattern.value);
   const startMessage = `Starting new game! We are playing for ${patternTitle}. Good luck everyone!`;
   showToast(startMessage, 'success');
   speakMessage(startMessage);
-  
+
   // Convert card numbers to proper format (e.g., 1 -> ROOM9-CAR0001)
   const currentRoomId = room.value?.id || 0;
-  const registeredCardNumbers = registeredCards.value.map(num => 
+  const registeredCardNumbers = registeredCards.value.map(num =>
     `ROOM${currentRoomId}-CAR${String(num).padStart(4, '0')}`
   );
-  
+
   console.log('[Frontend] Emitting new-match event:', {
     roomId: roomId.value,
     soldCards: registeredCards.value.length,
     houseFeePerCard: houseFee.value,
+    betAmount: betAmount.value,
     registeredCards: registeredCardNumbers,
+    pattern: currentPattern.value,
   });
-  
+
   const emitNewMatch = () => {
     console.log('[Frontend] ✅ Socket connected, emitting event...');
     socketStore.client?.emit('new-match', {
       roomId: roomId.value,
       soldCards: registeredCards.value.length,
       houseFeePerCard: houseFee.value,
+      betAmount: betAmount.value,
       registeredCards: registeredCardNumbers,
+      pattern: currentPattern.value,
     }, (response?: { error?: string }) => {
       if (response?.error) {
         console.error('[Frontend] ❌ Server error:', response.error);
@@ -1309,6 +1181,15 @@ const startNewGame = async () => {
     gameStatus.value = 'playing';
     matchWinners.value = [];
     showToast(`Game started with ${registeredCards.value.length} registered cards!`, 'success');
+    if (initialCallTimeout !== null) {
+      window.clearTimeout(initialCallTimeout);
+    }
+    initialCallTimeout = window.setTimeout(() => {
+      initialCallTimeout = null;
+      if (gameStatus.value === 'playing' && calledNumbers.value.length === 0) {
+        callNextNumber();
+      }
+    }, 15000);
   };
 
   if (!socketStore.client?.connected) {
@@ -1341,21 +1222,21 @@ const pauseGame = () => {
     showToast('Only admin or assigned room manager can pause a game.', 'warning');
     return;
   }
-  
+
   console.log('[PAUSE] ========== PAUSE GAME CLICKED ==========');
   console.log('[PAUSE] Match ID:', room.value?.currentMatch?.id);
   console.log('[PAUSE] Room ID:', roomId.value);
   console.log('[PAUSE] Socket connected:', socketStore.client?.connected);
   console.log('[PAUSE] Emitting pause-match event...');
-  
-  socketStore.client?.emit('pause-match', { 
+
+  socketStore.client?.emit('pause-match', {
     matchId: room.value?.currentMatch?.id,
-    roomId: roomId.value 
+    roomId: roomId.value
   });
-  
+
   gameStatus.value = 'paused';
   console.log('[PAUSE] ✅ Game status set to paused');
-  
+
   // Announce pause
   speakMessage('Game paused. BINGO called!');
 };
@@ -1370,67 +1251,111 @@ const resumeGame = () => {
     roomId: roomId.value,
   });
   gameStatus.value = 'playing';
-  
+
   // Announce resume
   speakMessage('Game resumed. Continuing to call numbers.');
+
+  // Resume auto-call if it was enabled
+  if (autoCallEnabled.value) {
+    startAutoCall();
+  }
 };
 
-const changeCallingSpeed = (newSpeed: number) => {
+const togglePauseResume = () => {
+  if (gameStatus.value === 'playing') {
+    pauseGame();
+    return;
+  }
+
+  if (gameStatus.value === 'paused') {
+    resumeGame();
+  }
+};
+
+// Manual call next number
+const callNextNumber = () => {
   if (!canManageRoom.value) {
-    showToast('Only admin or assigned room manager can change speed.', 'warning');
+    showToast('Only admin or assigned room manager can call numbers.', 'warning');
     return;
   }
-  
+
   if (gameStatus.value !== 'playing') {
+    showToast('Game is not active.', 'warning');
     return;
   }
-  
+
+  if (calledNumbers.value.length >= 75) {
+    showToast('All numbers have been called!', 'info');
+    return;
+  }
+
+  // Manually call by changing speed momentarily to trigger immediate call
   socketStore.client?.emit('change-speed', {
     matchId: room.value?.currentMatch?.id,
     roomId: roomId.value,
-    speed: newSpeed,
+    speed: 100, // Very fast to trigger immediately
   });
-  
-  const speedLabel = callingSpeedLabel.value;
-  showToast(`Calling speed changed to ${speedLabel} (${(newSpeed / 1000).toFixed(1)}s)`, 'info');
+
+  // Reset to normal speed after a moment
+  setTimeout(() => {
+    socketStore.client?.emit('change-speed', {
+      matchId: room.value?.currentMatch?.id,
+      roomId: roomId.value,
+      speed: callingSpeed.value,
+    });
+  }, 200);
 };
 
-const finishGame = () => {
-  if (!canManageRoom.value) {
-    showToast('Only admin or assigned room manager can finish a game.', 'warning');
+// Toggle auto-call functionality
+const toggleAutoCall = () => {
+  if (boardShuffleActive.value) {
+    autoCallEnabled.value = true;
+    beginShuffleWait();
     return;
   }
-  
-  if (matchWinners.value.length === 0) {
-    showToast('No winners verified yet.', 'warning');
-    return;
-  }
-  
-  // END THE GAME - All winners verified!
-  gameStatus.value = 'idle';
-  
-  // Announce game end with winner celebration
-  const winnerCount = matchWinners.value.length;
-  if (winnerCount === 1) {
-    speakMessage(`Congratulations to our winner! Game complete.`);
+
+  autoCallEnabled.value = !autoCallEnabled.value;
+
+  if (autoCallEnabled.value) {
+    if (gameStatus.value === 'playing') {
+      startAutoCall();
+      showToast('Auto-call enabled', 'success');
+    } else {
+      autoCallEnabled.value = false;
+      showToast('Start a game first to enable auto-call', 'warning');
+    }
   } else {
-    speakMessage(`Congratulations to all ${winnerCount} winners! Game complete.`);
+    stopAutoCall();
+    if (initialCallTimeout !== null) {
+      window.clearTimeout(initialCallTimeout);
+      initialCallTimeout = null;
+    }
+    showToast('Auto-call disabled', 'info');
   }
-  
-  // Show game ended message
-  const winnersList = matchWinners.value.map(w => w.cardNumber).join(', ');
-  const gameEndMessage = `🎉 Game Over! Winners (${matchWinners.value.length}): ${winnersList}`;
-  showToast(gameEndMessage, 'success');
-  speakMessage(`Game ended. ${matchWinners.value.length} winner${matchWinners.value.length > 1 ? 's' : ''} verified!`);
-  
-  // Emit game end event to backend
-  if (room.value?.currentMatch?.id) {
-    socketStore.client?.emit(END_MATCH_EVENT, {
-      matchId: room.value.currentMatch.id,
-      roomId: roomId.value,
-      winners: matchWinners.value,
-    });
+};
+
+// Start auto-calling numbers
+const startAutoCall = () => {
+  if (autoCallTimer) {
+    clearInterval(autoCallTimer);
   }
+
+  autoCallTimer = window.setInterval(() => {
+    if (gameStatus.value === 'playing' && calledNumbers.value.length < 75) {
+      callNextNumber();
+    } else {
+      stopAutoCall();
+    }
+  }, callingSpeed.value);
+};
+
+// Stop auto-calling
+const stopAutoCall = () => {
+  if (autoCallTimer) {
+    clearInterval(autoCallTimer);
+    autoCallTimer = null;
+  }
+  autoCallEnabled.value = false;
 };
 
 const resetGame = () => {
@@ -1438,7 +1363,10 @@ const resetGame = () => {
     showToast('Only admin or assigned room manager can reset a game.', 'warning');
     return;
   }
-  
+
+  stopAutoCall();
+  cancelShuffleWorkflow();
+
   // Emit reset event to backend
   if (room.value?.currentMatch?.id) {
     socketStore.client?.emit('reset-match', {
@@ -1446,7 +1374,7 @@ const resetGame = () => {
       roomId: roomId.value
     });
   }
-  
+
   // Immediately clear all frontend state for fast response
   calledNumbers.value = [];
   lastCalledNumber.value = 0;
@@ -1458,12 +1386,12 @@ const resetGame = () => {
   selectedCardForView.value = null;
   selectedCardGrid.value = null;
   showCardDetailsModal.value = false;
-  
+
   // Unlock all cards for this match
   if (room.value?.currentMatch?.id) {
     services?.cardService.unlockMatch(room.value.currentMatch.id);
   }
-  
+
   showToast('Game reset successfully', 'success');
 };
 
@@ -1488,16 +1416,16 @@ const verifyWin = async () => {
 
   try {
     const normalizedCardNumber = normalizeCardNumber(verifyCardNumber.value);
-    
+
     const response = await services?.cardService.verify(
       normalizedCardNumber,
       calledNumbers.value,
       activePattern.value
     );
-    
+
     verificationResult.value = response?.data as VerificationResult;
     verifyCardNumber.value = normalizedCardNumber;
-    
+
     // Extract card number for viewing details
     const cardNumMatch = normalizedCardNumber.match(/\d+$/);
     if (cardNumMatch) {
@@ -1522,7 +1450,7 @@ const verifyWin = async () => {
         timestamp: new Date(),
         specialWin: response?.data.specialWin || false,
       });
-      
+
       // Check if it's a special win (unlucky winner - zero marks after 12 calls)
       if (response?.data.specialWin) {
         const specialMessage = `🎉 SPECIAL WIN! Card ${normalizedCardNumber} has zero numbers marked after 12 calls - Unlucky Winner!`;
@@ -1531,11 +1459,11 @@ const verifyWin = async () => {
       } else {
         const patternTitle = getPatternTitle(activePattern.value);
         const patternDetails = getWinningPatternDetails();
-        
+
         // Show winner count if multiple winners
         const winnerCount = matchWinners.value.length;
         const winnerInfo = winnerCount > 1 ? ` (Winner #${winnerCount})` : '';
-        
+
         const serverMessage = response?.data.message?.trim();
         const successMessage =
           serverMessage ||
@@ -1543,19 +1471,19 @@ const verifyWin = async () => {
         showToast(successMessage, 'success');
         speakMessage(`Congratulations! ${normalizedCardNumber} is a valid ${patternTitle} winner.`);
       }
-      
+
       // Show multiple winners info
       if (matchWinners.value.length > 1) {
         const winnersInfo = `Total winners: ${matchWinners.value.length} - Prize will be split equally.`;
         showToast(winnersInfo, 'info');
       }
-      
+
       // Keep game PAUSED to allow verifying more winners
       gameStatus.value = 'paused';
-      
+
       // Clear the input for next verification
       verifyCardNumber.value = '';
-      
+
       // Show message about verifying more winners
       const moreWinnersMessage = `Winner verified! You can verify more winners or click "Finish Game" to end.`;
       showToast(moreWinnersMessage, 'info');
@@ -1564,7 +1492,7 @@ const verifyWin = async () => {
       const unregisteredMessage = `❌ UNREGISTERED CARD! ${response?.data.message || 'This card was not registered for this game.'}`;
       showToast(unregisteredMessage, 'error');
       speakMessage(`Card not registered. Only registered cards can win.`);
-      
+
       // Do NOT lock the card, just reject the verification
       showToast('Click RESUME to continue calling numbers.', 'info');
     } else if (response?.data.cardLocked) {
@@ -1572,25 +1500,25 @@ const verifyWin = async () => {
       const lockedMessage = `Card ${normalizedCardNumber} is locked due to a previous wrong claim.`;
       showToast(lockedMessage, 'error');
       speakMessage(`Invalid claim. ${normalizedCardNumber} is locked.`);
-      
+
       showToast('Click RESUME to continue calling numbers.', 'info');
     } else {
       // Invalid claim - check if it's a timing issue (late claim)
-      const isLateClaim = response?.data.lateClaim || 
-                          response?.data.message?.includes('Pattern was completed earlier') || 
-                          response?.data.message?.includes('not on the current number');
-      
+      const isLateClaim = response?.data.lateClaim ||
+        response?.data.message?.includes('Pattern was completed earlier') ||
+        response?.data.message?.includes('not on the current number');
+
       if (isLateClaim) {
         // Late BINGO claim - pattern was completed earlier
         // BUT still show the winning pattern so manager can see what was completed
         const lateClaimMessage = `❌ LATE CLAIM! ${response?.data.message || 'You must call BINGO immediately when you win!'}`;
         showToast(lateClaimMessage, 'error');
-        
-        // Play late claim audio (Amharic toast)
+
+        // Play the late-claim event audio
         if (currentLanguage.value === 'am') {
           try {
-            await amharicAudio.playToast('winner-late');
-            console.log('[Audio Debug] ✅ Played late claim toast audio');
+            await amharicAudio.playEvent('winner-invalid');
+            console.log('[Audio Debug] ✅ Played late claim event audio');
           } catch (error) {
             console.error('[Audio Debug] ❌ Error playing late claim audio:', error);
             // Fallback to text-to-speech
@@ -1599,16 +1527,16 @@ const verifyWin = async () => {
         } else {
           speakMessage('Late claim rejected. You must call BINGO immediately. Click the resume button.');
         }
-        
+
         // Show additional info about the late claim
         if (response?.data.patternNames && response?.data.patternNames.length > 0) {
           const patternInfo = `Pattern completed: ${response.data.patternNames.join(', ')}`;
           showToast(patternInfo, 'warning');
         }
-        
+
         // NOTE: verificationResult is already set above, so the pattern will display
         // The winning pattern grid will show even though it's a late claim
-        
+
         // Don't auto-resume - let manager click resume button
         showToast('Click RESUME button to continue the game', 'info');
       } else {
@@ -1616,12 +1544,12 @@ const verifyWin = async () => {
         const invalidMessage = `Invalid win. Card ${normalizedCardNumber} will be locked until game ends.`;
         showToast(invalidMessage, 'error');
         speakMessage(`Invalid win for ${normalizedCardNumber}. The card is now locked.`);
-        
+
         // Lock the card
         if (room.value?.currentMatch?.id) {
           await services?.cardService.lockCard(normalizedCardNumber, room.value.currentMatch.id);
         }
-        
+
         if (matchWinners.value.length > 0) {
           showToast('Invalid claim. Game remains paused because valid winners exist.', 'info');
         } else {
@@ -1633,7 +1561,6 @@ const verifyWin = async () => {
     console.error('Error verifying win:', error);
     const message = 'Failed to verify win. Please try again.';
     showToast(message, 'error');
-    speakMessage(message);
   } finally {
     verifying.value = false;
   }
@@ -1651,14 +1578,13 @@ const saveBettingSettings = async () => {
     await services?.roomService.ticketPrice(roomId.value, Number(betAmount.value || 0));
     showBettingModal.value = false;
     showToast('Ticket price updated successfully!', 'success');
-    
+
     // Refresh room data to show updated ticket price
     await loadRoomData();
   } catch (error) {
     const maybeError = error as { response?: { data?: { message?: string } }; message?: string };
     const message = 'Error saving betting settings: ' + (maybeError.response?.data?.message || maybeError.message || 'Unknown error');
     showToast(message, 'error');
-    speakMessage('Failed to save betting settings.');
   }
 };
 
@@ -1667,8 +1593,20 @@ const loadRoomData = async () => {
   try {
     const response = await services?.roomService.show(roomId.value);
     room.value = response?.data ?? null;
+    const catalogResponse = await services?.roomService.getRoomCardCatalog(roomId.value);
+    cardCatalog.value = (catalogResponse?.data?.cards || [])
+      .map((card) => card.index)
+      .filter((index) => Number.isInteger(index) && index > 0)
+      .sort((a, b) => a - b);
     betAmount.value = Number(room.value?.ticketPrice || 0);
-    
+
+    // Load pattern from active match if available
+    if (room.value?.currentMatch?.pattern && !room.value.currentMatch.closed) {
+      currentPattern.value = room.value.currentMatch.pattern;
+      selectedPatternForMatch.value = room.value.currentMatch.pattern;
+      console.log(`[BingoRoom] Loaded pattern from active match: ${room.value.currentMatch.pattern}`);
+    }
+
     const permission = await services?.roomService.canManageRoom(roomId.value);
     canManageRoomByApi.value = Boolean(permission?.data?.canManage);
   } catch (error) {
@@ -1680,7 +1618,33 @@ const loadRoomData = async () => {
 type PatternCoordinates = number[][][];
 
 const getPatternCoordinates = (pattern: string): PatternCoordinates => {
+  const lines: PatternCoordinates = [
+    ...Array.from({ length: 5 }, (_, row) =>
+      Array.from({ length: 5 }, (_, col) => [row, col]),
+    ),
+    ...Array.from({ length: 5 }, (_, col) =>
+      Array.from({ length: 5 }, (_, row) => [row, col]),
+    ),
+    [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]],
+    [[0, 4], [1, 3], [2, 2], [3, 1], [4, 0]],
+  ];
+  const combineLines = (count: number): PatternCoordinates => {
+    const combinations: PatternCoordinates = [];
+    const visit = (start: number, selected: number[][][]) => {
+      if (selected.length === count) {
+        combinations.push(selected.flat());
+        return;
+      }
+      for (let index = start; index < lines.length; index++) {
+        visit(index + 1, [...selected, lines[index]]);
+      }
+    };
+    visit(0, []);
+    return combinations;
+  };
   const patterns: Record<string, PatternCoordinates> = {
+    twoline: combineLines(2),
+    threeline: combineLines(3),
     anyline: [
       // Show all possible lines for visualization
       [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4]], // Row 0
@@ -1732,16 +1696,27 @@ const getPatternCoordinates = (pattern: string): PatternCoordinates => {
 const isPatternCell = (row: number, col: number, pattern: string) => {
   const patternCoords = getPatternCoordinates(pattern);
   if (patternCoords.length === 0) return false;
-  
+
   // Check ALL pattern options (important for diagonal which has 2 options)
   return patternCoords.some((coords) =>
     coords.some((cell) => cell[0] === row && cell[1] === col),
   );
 };
 
+const isPreviewPatternCell = (row: number, col: number, pattern: string) => {
+  const patternCoords = getPatternCoordinates(pattern);
+  if (patternCoords.length === 0) return false;
+
+  if (pattern === 'twoline' || pattern === 'threeline') {
+    return patternCoords[0].some((cell) => cell[0] === row && cell[1] === col);
+  }
+
+  return isPatternCell(row, col, pattern);
+};
+
 const isWinningPatternCell = (row: number, col: number) => {
   if (!verificationResult.value) return false;
-  
+
   // Check all winning patterns if available
   const winningPatterns = verificationResult.value.winningPatterns;
   if (Array.isArray(winningPatterns) && winningPatterns.length > 0) {
@@ -1750,7 +1725,7 @@ const isWinningPatternCell = (row: number, col: number) => {
       pattern.some((cell) => cell[0] === row && cell[1] === col),
     );
   }
-  
+
   // Fallback to single pattern
   const winningPattern = verificationResult.value.winningPattern;
   if (!winningPattern) return false;
@@ -1758,16 +1733,14 @@ const isWinningPatternCell = (row: number, col: number) => {
 };
 
 onMounted(async () => {
-  initializeRingBalls();
-  
   try {
     console.log('Loading room:', roomId.value);
-    
+
     // Load room data
     await loadRoomData();
-    
+
     console.log('Room response:', room.value);
-    
+
     if (room.value?.currentMatch?.matchNumbers) {
       // Set game status based on match state
       if (room.value.currentMatch.closed) {
@@ -1825,11 +1798,17 @@ onMounted(async () => {
 
 // Cleanup when leaving the room
 onBeforeUnmount(() => {
-  stopRingShuffleMotion();
+  stopBoardShuffleMotion();
+  stopAutoCall();
+  cancelShuffleWorkflow();
+  if (initialCallTimeout !== null) {
+    window.clearTimeout(initialCallTimeout);
+    initialCallTimeout = null;
+  }
 
   // Stop speech synthesis
   window.speechSynthesis.cancel();
-  
+
   // Clear Amharic audio cache
   amharicAudio.clearCache();
 });
@@ -1853,61 +1832,191 @@ onBeforeUnmount(() => {
 }
 
 .left-panel {
-  display: block !important;
+  display: none !important;
 }
 
 .right-panel {
   display: block !important;
+  flex: 0 0 100% !important;
+  max-width: 100% !important;
+}
+
+.terminal-menu-card {
+  min-width: 220px;
+  background: #fff !important;
+}
+
+.pattern-settings-panel {
+  position: relative;
+  z-index: 2;
+  border-bottom: 1px solid #d7dee5;
+  background: #f7f9fb;
+  box-shadow: 0 4px 12px rgba(20, 34, 53, 0.12);
+}
+
+.pattern-settings-inner {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 16px 32px 18px;
+}
+
+.pattern-settings-heading,
+.pattern-settings-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.pattern-settings-title {
+  color: #142235;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.pattern-settings-subtitle {
+  margin-top: 2px;
+  color: #607080;
+  font-size: 12px;
+}
+
+.pattern-settings-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: #546e7a;
+}
+
+.pattern-settings-close:hover,
+.pattern-settings-close:focus-visible {
+  background: #e4ebf1;
+}
+
+.pattern-settings-controls {
+  justify-content: flex-start;
+  margin-top: 12px;
+}
+
+.pattern-settings-controls .v-select {
+  width: min(360px, 100%);
+}
+
+.header-pattern-preview {
+  max-width: 400px;
+  margin: 18px auto 0;
+  border-top: 1px solid #e0e0e0;
+  padding-top: 16px;
+}
+
+.header-pattern-preview .pattern-card-header {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(30px, 1fr));
+  gap: 8px;
+  max-width: 360px;
+  margin-right: auto;
+  margin-left: auto;
+  margin-top: 8px;
+}
+
+.header-pattern-preview .pattern-header-letter {
+  min-height: 42px;
+  padding: 8px 0;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.header-pattern-preview .pattern-grid {
+  width: 100%;
+  max-width: 360px;
+  margin: 0 auto;
+  border-collapse: separate;
+  border-spacing: 5px;
+  padding: 7px;
+  border-radius: 12px;
+  background: #1b2230;
+  box-shadow: 0 8px 20px rgba(20, 34, 53, 0.2);
+}
+
+.header-pattern-preview .pattern-cell {
+  width: 20%;
+  height: clamp(42px, 7vw, 58px);
+  padding: 10px 4px;
+  border: 2px solid #d9dee7;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #263238;
+  font-size: clamp(0.85rem, 1.4vw, 1.1rem);
+  font-weight: 800;
+  text-align: center;
+}
+
+.header-pattern-preview .pattern-cell.pattern-active {
+  background: #e53935;
+  color: #fff;
+  border-color: #b71c1c;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.18);
+}
+
+.header-pattern-preview .pattern-cell.pattern-free {
+  background: #ffd740;
+  color: #17202a;
+  border-color: #ffb300;
 }
 
 .info-card {
-  background: linear-gradient(145deg, #ffffff 0%, #f8f9fa 100%) !important;
-  border-radius: 16px !important;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
-  border: 1px solid rgba(255, 255, 255, 0.8) !important;
+  background: #142235 !important;
+  border-radius: 6px !important;
+  box-shadow: 0 10px 28px rgba(2, 8, 18, 0.42) !important;
+  border: 1px solid #25506d !important;
 }
 
 .info-card-title {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-  color: white !important;
-  padding: 20px !important;
-  border-radius: 16px 16px 0 0 !important;
-  
+  display: flex;
+  justify-content: center;
+  background: #1a6a9c !important;
+  color: #eaf8ff !important;
+  padding: 9px 12px !important;
+  border-radius: 5px 5px 0 0 !important;
+
   h2 {
-    font-size: 1.5rem;
-    font-weight: 700;
-    letter-spacing: 0.5px;
+    font-size: 0.82rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
     margin: 0;
   }
 }
 
 .current-ball {
-  margin: 24px auto;
-  padding: 16px;
-  background: linear-gradient(145deg, #f8f9fa 0%, #ffffff 100%);
-  border-radius: 20px;
-  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.05);
+  margin: 14px auto 10px;
+  padding: 12px 10px 10px;
+  background: #0b1725;
+  border: 1px solid #20425c;
+  border-radius: 4px;
+  box-shadow: inset 0 0 20px rgba(2, 8, 18, 0.72);
 }
 
 .ball-display {
-  width: 160px;
-  height: 160px;
+  width: 104px;
+  height: 104px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 4.5rem;
+  font-size: 3.2rem;
   font-weight: 800;
   color: white;
   margin: 0 auto;
-  box-shadow: 
-    0 12px 28px rgba(0, 0, 0, 0.25),
-    0 0 0 8px rgba(255, 255, 255, 0.9),
-    inset 0 -8px 16px rgba(0, 0, 0, 0.15);
-  border: none;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.44), 0 0 0 5px #173a54, inset 0 -8px 16px rgba(0, 0, 0, 0.2);
+  border: 2px solid #71dcf5;
   animation: pulse 2s infinite;
   position: relative;
-  
+
   &::before {
     content: '';
     position: absolute;
@@ -1915,60 +2024,70 @@ onBeforeUnmount(() => {
     left: 20%;
     width: 40%;
     height: 30%;
-    background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.4) 0%, transparent 70%);
+    background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.32) 0%, transparent 70%);
     border-radius: 50%;
     transform: rotate(-45deg);
   }
 }
 
 @keyframes pulse {
-  0%, 100% { transform: scale(1); box-shadow: 0 12px 28px rgba(0, 0, 0, 0.25), 0 0 0 8px rgba(255, 255, 255, 0.9), inset 0 -8px 16px rgba(0, 0, 0, 0.15); }
-  50% { transform: scale(1.05); box-shadow: 0 16px 36px rgba(0, 0, 0, 0.3), 0 0 0 10px rgba(255, 255, 255, 0.95), inset 0 -10px 20px rgba(0, 0, 0, 0.2); }
+
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.25), 0 0 0 8px rgba(255, 255, 255, 0.9), inset 0 -8px 16px rgba(0, 0, 0, 0.15);
+  }
+
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.3), 0 0 0 10px rgba(255, 255, 255, 0.95), inset 0 -10px 20px rgba(0, 0, 0, 0.2);
+  }
 }
 
 .ball-letter {
-  font-size: 2rem;
+  font-size: 1rem;
   font-weight: 800;
-  margin-top: 12px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  margin-top: 9px;
+  color: #7cdbf4;
   text-shadow: none;
-  letter-spacing: 2px;
+  letter-spacing: 0.2em;
 }
 
-.ball-b { 
+.ball-b {
   background: linear-gradient(135deg, #2196f3 0%, #1565c0 100%);
-  box-shadow: 
+  box-shadow:
     0 12px 28px rgba(33, 150, 243, 0.4),
     0 0 0 8px rgba(255, 255, 255, 0.9),
     inset 0 -8px 16px rgba(0, 0, 0, 0.15);
 }
-.ball-i { 
+
+.ball-i {
   background: linear-gradient(135deg, #ef5350 0%, #c62828 100%);
-  box-shadow: 
+  box-shadow:
     0 12px 28px rgba(239, 83, 80, 0.4),
     0 0 0 8px rgba(255, 255, 255, 0.9),
     inset 0 -8px 16px rgba(0, 0, 0, 0.15);
 }
-.ball-n { 
+
+.ball-n {
   background: linear-gradient(135deg, #66bb6a 0%, #2e7d32 100%);
-  box-shadow: 
+  box-shadow:
     0 12px 28px rgba(102, 187, 106, 0.4),
     0 0 0 8px rgba(255, 255, 255, 0.9),
     inset 0 -8px 16px rgba(0, 0, 0, 0.15);
 }
-.ball-g { 
+
+.ball-g {
   background: linear-gradient(135deg, #ffa726 0%, #ef6c00 100%);
-  box-shadow: 
+  box-shadow:
     0 12px 28px rgba(255, 167, 38, 0.4),
     0 0 0 8px rgba(255, 255, 255, 0.9),
     inset 0 -8px 16px rgba(0, 0, 0, 0.15);
 }
-.ball-o { 
+
+.ball-o {
   background: linear-gradient(135deg, #ab47bc 0%, #6a1b9a 100%);
-  box-shadow: 
+  box-shadow:
     0 12px 28px rgba(171, 71, 188, 0.4),
     0 0 0 8px rgba(255, 255, 255, 0.9),
     inset 0 -8px 16px rgba(0, 0, 0, 0.15);
@@ -1977,32 +2096,30 @@ onBeforeUnmount(() => {
 .recent-numbers {
   display: flex;
   justify-content: center;
-  gap: 10px;
+  gap: 7px;
   flex-wrap: wrap;
-  margin-top: 20px;
-  padding: 12px;
-  background: linear-gradient(145deg, #f8f9fa 0%, #ffffff 100%);
-  border-radius: 16px;
-  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.05);
+  margin-top: 12px;
+  padding: 9px 6px;
+  background: #0b1725;
+  border: 1px solid #20425c;
+  border-radius: 4px;
+  box-shadow: inset 0 0 16px rgba(2, 8, 18, 0.6);
 }
 
 .recent-ball {
-  width: 56px;
-  height: 56px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.3rem;
+  font-size: 0.82rem;
   font-weight: 800;
   color: white;
-  box-shadow: 
-    0 6px 16px rgba(0, 0, 0, 0.2),
-    0 0 0 4px rgba(255, 255, 255, 0.9),
-    inset 0 -4px 8px rgba(0, 0, 0, 0.15);
-  border: none;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.34), 0 0 0 2px #1c425b, inset 0 -4px 8px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(116, 220, 245, 0.7);
   position: relative;
-  
+
   &::before {
     content: '';
     position: absolute;
@@ -2070,7 +2187,7 @@ onBeforeUnmount(() => {
 
   &.called {
     color: #ff0000;
-    text-shadow: 
+    text-shadow:
       0 0 5px #ff0000,
       0 0 10px #ff0000,
       0 0 15px #ff0000,
@@ -2079,22 +2196,138 @@ onBeforeUnmount(() => {
   }
 }
 
+.sidebar-card {
+  background: #142235 !important;
+  border: 1px solid #25506d !important;
+  border-radius: 6px !important;
+  box-shadow: 0 10px 28px rgba(2, 8, 18, 0.42) !important;
+  color: #c3d9e8;
+}
+
+.info-card :deep(.v-card-text),
+.sidebar-card :deep(.v-card-text) {
+  padding: 12px !important;
+}
+
+.info-card h3 {
+  margin: 10px 0 0;
+  color: #8fb2c8;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.voice-card :deep(.v-card-title),
+.controls-card :deep(.v-card-title) {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  padding: 8px 12px !important;
+  color: #dff7ff !important;
+  font-size: 0.72rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.voice-card :deep(.v-card-title) {
+  background: #1a6a9c !important;
+}
+
+.controls-card :deep(.v-card-title) {
+  background: #194c69 !important;
+}
+
+.sidebar-card :deep(.v-field) {
+  color: #cbe4f1 !important;
+  background: #0d1b2b !important;
+  border-color: #2b5873 !important;
+}
+
+.sidebar-card :deep(.v-field__input),
+.sidebar-card :deep(.v-label) {
+  color: #9fc1d3 !important;
+  font-size: 0.76rem;
+}
+
+.sidebar-card :deep(.v-field--disabled) {
+  opacity: 0.7;
+}
+
+.sidebar-card :deep(.v-btn) {
+  min-height: 34px;
+  border-radius: 3px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.sidebar-card :deep(.v-btn--variant-outlined) {
+  border-color: #368bb1;
+  color: #6fd9f5;
+}
+
+.controls-card :deep(.v-card--variant-tonal) {
+  background: #10263a !important;
+  border: 1px solid #225777 !important;
+  border-radius: 4px !important;
+}
+
+.controls-card :deep(.v-card--variant-tonal .v-card-text) {
+  padding: 10px !important;
+}
+
+.controls-card :deep(.v-slider-track__background),
+.controls-card :deep(.v-slider-track__fill) {
+  background: #3cb9da !important;
+}
+
+.controls-card :deep(.v-slider-thumb__surface) {
+  background: #72e1f5 !important;
+}
+
+.controls-card :deep(.text-grey),
+.controls-card :deep(.text-subtitle-2) {
+  color: #88aec3 !important;
+  font-size: 0.68rem !important;
+}
+
+.controls-card :deep(.v-divider) {
+  border-color: #28506a !important;
+  opacity: 0.8;
+}
+
+.pattern-preview {
+  padding: 8px;
+  background: #0b1725;
+  border: 1px solid #20425c;
+  border-radius: 4px;
+}
+
+.pattern-preview :deep(.pattern-grid) {
+  max-width: 100%;
+}
+
 @keyframes glow {
-  0% { 
+  0% {
     color: #333;
     text-shadow: none;
   }
-  50% { 
+
+  50% {
     color: #ff0000;
-    text-shadow: 
+    text-shadow:
       0 0 10px #ff0000,
       0 0 20px #ff0000,
       0 0 30px #ff0000,
       0 0 40px #ff0000;
   }
-  100% { 
+
+  100% {
     color: #ff0000;
-    text-shadow: 
+    text-shadow:
       0 0 5px #ff0000,
       0 0 10px #ff0000,
       0 0 15px #ff0000,
@@ -2106,12 +2339,12 @@ onBeforeUnmount(() => {
   border-radius: 16px !important;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12) !important;
   overflow: hidden !important;
-  
+
   .v-card-title {
     font-weight: 600;
     letter-spacing: 0.3px;
   }
-  
+
   .v-card-text {
     padding: 20px !important;
   }
@@ -2156,9 +2389,12 @@ onBeforeUnmount(() => {
 }
 
 @keyframes pulse-warning {
-  0%, 100% {
+
+  0%,
+  100% {
     box-shadow: 0 0 20px rgba(255, 152, 0, 0.8);
   }
+
   50% {
     box-shadow: 0 0 40px rgba(255, 152, 0, 1);
   }
@@ -2294,20 +2530,20 @@ onBeforeUnmount(() => {
   cursor: pointer;
   transition: all 0.2s ease;
   user-select: none;
-  
+
   &:hover {
     transform: scale(1.08);
     box-shadow: 0 4px 12px rgba(123, 31, 162, 0.6);
     border-color: rgba(123, 31, 162, 0.8);
     z-index: 2;
   }
-  
+
   &.card-registered {
     background: linear-gradient(135deg, #d32f2f 0%, #c62828 100%);
     border-color: rgba(211, 47, 47, 0.5);
     animation: pulse-red 2s infinite;
   }
-  
+
   &.card-selected {
     background: linear-gradient(135deg, #9c27b0 0%, #7b1fa2 100%);
     border-color: #e1bee7;
@@ -2329,8 +2565,15 @@ onBeforeUnmount(() => {
 }
 
 @keyframes pulse-red {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.8; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.8;
+  }
 }
 
 .card-selection-info {
@@ -2398,30 +2641,45 @@ onBeforeUnmount(() => {
 
 .betting-input {
   background: white !important;
-  
+
   :deep(.v-field) {
     background: white !important;
   }
-  
+
   :deep(.v-field__input) {
     background: white !important;
     color: #333 !important;
   }
-  
+
   :deep(.v-field__outline) {
     color: #667eea !important;
   }
 }
 
 .card-details-card {
-  background: white !important;
-  border: 2px solid #7b1fa2 !important;
+  overflow: hidden;
+  background: #ffffff !important;
+  border: 1px solid #d7dce5 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 14px 36px rgba(27, 31, 59, 0.28) !important;
+
+  :deep(.v-card-text) {
+    background: #ffffff !important;
+    color: #111827 !important;
+  }
 }
 
 .card-details-title {
-  background: linear-gradient(135deg, #7b1fa2 0%, #6a1b9a 100%);
-  color: white;
-  font-weight: bold;
+  min-height: 58px;
+  background: linear-gradient(135deg, #8524b5 0%, #6f1b9d 100%) !important;
+  color: #ffffff !important;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+
+  :deep(.v-icon),
+  :deep(.v-btn) {
+    color: #ffffff !important;
+  }
 }
 
 .card-detail-display {
@@ -2433,32 +2691,32 @@ onBeforeUnmount(() => {
   width: 100%;
   border-collapse: separate;
   border-spacing: 3px;
-  background: #f5f5f5;
+  background: #f1f3f7;
   border-radius: 8px;
   padding: 6px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  
+
   .detail-card-cell {
     width: 48px;
     height: 48px;
     text-align: center;
     font-size: 1rem;
     font-weight: bold;
-    background: linear-gradient(135deg, #7b1fa2 0%, #6a1b9a 100%);
-    color: white;
-    border: 2px solid #6a1b9a;
-    border-radius: 6px;
+    background: linear-gradient(135deg, #8524b5 0%, #6f1b9d 100%);
+    color: #ffffff;
+    border: 1px solid #5b147f;
+    border-radius: 7px;
     transition: all 0.3s;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-    
+
     &:hover {
       transform: scale(1.05);
       box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
     }
-    
+
     &.free-space {
       background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
-      color: #333;
+      color: #111827;
       font-size: 1rem;
       font-weight: bold;
       border-color: #fbc02d;
@@ -2476,6 +2734,13 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: center;
   gap: 12px;
+  color: #111827;
+}
+
+.inline-fee-field {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e6eb;
 }
 
 .static-card-display {
@@ -2487,18 +2752,19 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: space-around;
   margin-bottom: 8px;
-  
+  padding: 0 6px;
+
   .card-letter {
     width: 48px;
-    height: 32px;
+    height: 36px;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 1.1rem;
-    font-weight: bold;
-    color: white;
+    font-weight: 800;
+    color: #ffffff;
     background: linear-gradient(135deg, #7986cb 0%, #5c6bc0 100%);
-    border-radius: 8px;
+    border-radius: 8px 8px 5px 5px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   }
 }
@@ -2511,7 +2777,7 @@ onBeforeUnmount(() => {
   border-radius: 8px;
   padding: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  
+
   .card-cell {
     width: 70px;
     height: 70px;
@@ -2522,12 +2788,12 @@ onBeforeUnmount(() => {
     border: 2px solid #ddd;
     border-radius: 6px;
     transition: all 0.3s;
-    
+
     &:hover {
       background: #f0f0f0;
       transform: scale(1.05);
     }
-    
+
     &.free-space {
       background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
       color: #333;
@@ -2574,11 +2840,11 @@ onBeforeUnmount(() => {
   font-weight: 800;
   color: white;
   border-radius: 8px;
-  box-shadow: 
+  box-shadow:
     0 4px 12px rgba(0, 0, 0, 0.2),
     inset 0 -2px 4px rgba(0, 0, 0, 0.15);
   position: relative;
-  
+
   &::before {
     content: '';
     position: absolute;
@@ -2590,23 +2856,23 @@ onBeforeUnmount(() => {
     border-radius: 50%;
     transform: rotate(-45deg);
   }
-  
+
   &.letter-b {
     background: linear-gradient(135deg, #2196f3 0%, #1565c0 100%);
   }
-  
+
   &.letter-i {
     background: linear-gradient(135deg, #ef5350 0%, #c62828 100%);
   }
-  
+
   &.letter-n {
     background: linear-gradient(135deg, #66bb6a 0%, #2e7d32 100%);
   }
-  
+
   &.letter-g {
     background: linear-gradient(135deg, #ffa726 0%, #ef6c00 100%);
   }
-  
+
   &.letter-o {
     background: linear-gradient(135deg, #ab47bc 0%, #6a1b9a 100%);
   }
@@ -2633,25 +2899,25 @@ onBeforeUnmount(() => {
   border-radius: 8px;
   transition: all 0.3s ease;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  
+
   &.pattern-active {
     background: linear-gradient(135deg, #66bb6a 0%, #43a047 100%);
     color: white;
     border-color: #2e7d32;
-    box-shadow: 
+    box-shadow:
       0 4px 12px rgba(76, 175, 80, 0.5),
       0 0 0 2px rgba(255, 255, 255, 0.3);
     font-weight: 800;
     transform: scale(1.05);
   }
-  
+
   &.pattern-free {
     background: linear-gradient(135deg, #ffd54f 0%, #ffca28 100%);
     color: #333;
     font-size: 0.75rem;
     font-weight: 800;
     border-color: #fbc02d;
-    
+
     &.pattern-active {
       background: linear-gradient(135deg, #66bb6a 0%, #43a047 100%);
       color: white;
@@ -2712,136 +2978,419 @@ onBeforeUnmount(() => {
 }
 
 .history-card {
-  background: #1a1a2e !important;
-  border: 2px solid #333 !important;
+  background: #0d1a29 !important;
+  border: 2px solid #1b6c9e !important;
+  border-radius: 5px !important;
+  box-shadow: 0 10px 32px rgba(1, 8, 18, 0.58) !important;
 }
 
 .history-title {
-  background: #16213e !important;
-  color: white;
-  font-size: 1.2rem;
-  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: #101f31 !important;
+  color: #e2edf8;
+  min-height: 52px;
+  padding: 8px 14px !important;
+  border-bottom: 1px solid #215477;
+}
+
+.history-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.2;
+}
+
+.history-heading strong {
+  color: #f4f9ff;
+  font-size: 0.86rem;
+  letter-spacing: 0.08em;
+}
+
+.history-kicker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #51c8f7;
+  font-size: 0.56rem;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+}
+
+.history-heading-meta {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.history-game-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #7cc5e3;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+}
+
+.history-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #50d5eb;
+  box-shadow: 0 0 0 3px rgba(80, 213, 235, 0.14), 0 0 10px rgba(80, 213, 235, 0.8);
+}
+
+.history-prize {
+  color: #7aa8c4;
+  font-size: 0.61rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
 }
 
 .history-content {
-  background: #1a1a2e;
-  padding: 16px !important;
+  background: #0d1a29;
+  padding: 10px !important;
 }
 
-.history-grid {
+.history-board-scroll {
+  overflow-x: auto;
+  padding-bottom: 3px;
+}
+
+.history-board {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 820px;
+  padding: 7px;
+  background: #07111d;
+  border: 1px solid #17354d;
+  border-radius: 3px;
+  box-shadow: inset 0 0 24px rgba(1, 7, 16, 0.8);
+}
+
+.history-row {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
-  gap: 8px;
-  max-height: 400px;
-  overflow-y: auto;
-  padding: 8px;
-  background: #0f0f1e;
-  border-radius: 8px;
+  grid-template-columns: 34px repeat(15, minmax(0, 1fr));
+  gap: 3px;
+}
+
+.history-letter,
+.history-number {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 2px;
+  font-family: 'Courier New', monospace;
+  font-weight: 800;
+}
+
+.history-letter {
+  color: #a9d9ed;
+  font-size: 1.1rem;
+  background: #174b6b;
+  text-shadow: 0 0 10px rgba(116, 217, 255, 0.4);
+  border: 1px solid #2e86af;
 }
 
 .history-number {
-  width: 60px;
-  height: 60px;
-  border-radius: 8px;
+  position: relative;
+  min-width: 0;
+  color: #46657b;
+  background: #152334;
+  border: 1px solid #1a3349;
+  font-size: clamp(0.76rem, 1.4vw, 1rem);
+  letter-spacing: 0.03em;
+  transition: transform 0.18s ease, filter 0.18s ease, box-shadow 0.18s ease, color 0.18s ease;
+
+  &.history-number--uncalled {
+    background: #152334;
+    color: #46657b;
+  }
+
+  &.history-number--called {
+    color: #e8fbff;
+    background: #1485bc;
+    border-color: #42c7ef;
+    text-shadow: 0 0 9px rgba(178, 244, 255, 0.85);
+    box-shadow: inset 0 -3px 0 rgba(4, 62, 98, 0.35), 0 0 8px rgba(20, 133, 188, 0.45);
+  }
+
+  &.history-number--latest {
+    z-index: 1;
+    outline: 2px solid #77e5ff;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgba(112, 215, 255, 0.2), 0 0 18px rgba(112, 215, 255, 0.85);
+    animation: history-latest-pulse 1.8s ease-in-out infinite;
+  }
+
+  &:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.2);
+  }
+}
+
+@keyframes history-latest-pulse {
+
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+
+  50% {
+    filter: brightness(1.35);
+  }
+}
+
+.history-footer {
   display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: 1.4rem;
-  font-weight: bold;
-  color: white;
-  font-family: 'Courier New', monospace;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  transition: all 0.3s;
-  
-  &.uncalled {
-    background: #2a2a3e;
-    color: #555;
-    border-color: #333;
-  }
-  
-  &:hover {
-    transform: scale(1.05);
-  }
+  gap: 18px;
+  padding: 10px 4px 2px;
+  color: #7694aa;
+  border-top: 1px solid #17354d;
 }
 
-.shuffle-dialog {
-  background: transparent !important;
+.history-stat {
+  display: flex;
+  align-items: baseline;
+  min-width: 82px;
+  gap: 3px;
 }
 
-.shuffle-dialog .v-overlay__content {
-  background: rgba(14, 18, 32, 0.95) !important;
-  border-radius: 16px;
-  padding: 32px;
-  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.8);
+.history-stat-label,
+.history-last-call>span {
+  color: #54728b;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
 }
 
-.shuffle-ring-container {
+.history-stat strong {
+  color: #d8f3ff;
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+.history-stat-total {
+  color: #54728b;
+  font-size: 0.8rem;
+}
+
+.history-progress-wrap {
+  flex: 1;
+  min-width: 130px;
+}
+
+.history-progress-label {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 0.65rem;
+}
+
+.history-progress-label strong {
+  color: #61d8f7;
+}
+
+.history-progress-track {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: #1a3247;
+}
+
+.history-progress-value {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2b91c6, #48d7ec);
+  box-shadow: 0 0 12px rgba(72, 215, 236, 0.5);
+  transition: width 0.3s ease;
+}
+
+.history-legend {
+  display: flex;
+  gap: 12px;
+  color: #5f7b91;
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.history-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.history-legend-dot {
+  width: 8px;
+  height: 8px;
+  display: inline-block;
+  border-radius: 50%;
+}
+
+.history-legend-dot--called {
+  background: #37c9ed;
+}
+
+.history-legend-dot--available {
+  background: #304a60;
+}
+
+.history-last-call {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 32px;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 74px;
 }
 
-.shuffle-ring-wrapper {
-  position: relative;
-  width: 500px;
-  height: 500px;
-}
-
-.shuffle-ring-boundary {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  border: 8px solid #c5cae9;
-  box-shadow:
-    0 0 0 6px rgba(63, 81, 181, 0.35),
-    inset 0 0 48px rgba(255, 255, 255, 0.15),
-    0 8px 32px rgba(0, 0, 0, 0.5);
-  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.08) 0%, rgba(8, 10, 25, 0.92) 78%);
-}
-
-.ring-ball {
-  position: absolute;
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1rem;
-  font-weight: 700;
-  color: white;
-  border: 2px solid rgba(255, 255, 255, 0.9);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-  transition-property: transform;
-  transition-timing-function: ease-in-out;
-}
-
-.ring-ball.moving {
-  animation: ringBallPulse 0.8s ease-in-out infinite;
-}
-
-@keyframes ringBallPulse {
-  0%, 100% { filter: brightness(1); }
-  50% { filter: brightness(1.25); }
-}
-
-.shuffle-actions {
-  display: flex;
-  gap: 24px;
-  justify-content: center;
-  width: 100%;
-  margin-top: 8px;
-}
-
-.shuffle-actions .v-btn {
-  min-width: 180px;
-  font-weight: 600;
-  text-transform: none;
-  letter-spacing: 0.5px;
+.history-last-call strong {
+  color: #d8f3ff;
+  font-family: 'Courier New', monospace;
   font-size: 1.1rem;
-  padding: 12px 24px;
+}
+
+.history-last-call strong.ball-b {
+  color: #55b8ff;
+}
+
+.history-last-call strong.ball-i {
+  color: #ff7c86;
+}
+
+.history-last-call strong.ball-n {
+  color: #65dc96;
+}
+
+.history-last-call strong.ball-g {
+  color: #ffc05e;
+}
+
+.history-last-call strong.ball-o {
+  color: #c18ae9;
+}
+
+@media (max-width: 800px) {
+  .history-title {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .history-heading-meta {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .history-footer {
+    align-items: stretch;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+
+  .history-progress-wrap {
+    order: 3;
+    flex-basis: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .history-content {
+    padding: 10px !important;
+  }
+
+  .history-board {
+    min-width: 690px;
+    padding: 10px;
+    gap: 5px;
+  }
+
+  .history-row {
+    grid-template-columns: 34px repeat(15, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .history-letter,
+  .history-number {
+    min-height: 34px;
+  }
+
+  .history-letter {
+    font-size: 0.95rem;
+  }
+
+  .history-footer {
+    gap: 12px;
+  }
+
+  .history-legend {
+    width: 100%;
+    order: 4;
+  }
+}
+
+.tv-bingo-board {
+  position: relative;
+  overflow: hidden;
+}
+
+.tv-grid-cell--shuffling {
+  animation: history-cell-shuffle 260ms ease-in-out infinite alternate !important;
+  will-change: transform, filter, background-color;
+}
+
+.tv-grid-cell--shuffle-active {
+  background: #43a047 !important;
+  border-color: #b8ffb8 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 18px rgba(76, 175, 80, 0.95) !important;
+  transform: scale(1.18) !important;
+  animation: history-cell-shuffle-active 180ms ease-in-out infinite alternate !important;
+}
+
+.tv-grid-row:nth-child(2) .tv-grid-cell--shuffling {
+  animation-delay: 90ms;
+}
+
+.tv-grid-row:nth-child(3) .tv-grid-cell--shuffling {
+  animation-delay: 180ms;
+}
+
+.tv-grid-row:nth-child(4) .tv-grid-cell--shuffling {
+  animation-delay: 270ms;
+}
+
+.tv-grid-row:nth-child(5) .tv-grid-cell--shuffling {
+  animation-delay: 360ms;
+}
+
+@keyframes history-cell-shuffle {
+  from {
+    transform: translateY(-3px) rotate(-1deg);
+    filter: brightness(1);
+  }
+
+  to {
+    transform: translateY(3px) rotate(1deg);
+    filter: brightness(1.45);
+  }
+}
+
+@keyframes history-cell-shuffle-active {
+  from {
+    filter: brightness(1);
+  }
+
+  to {
+    filter: brightness(1.8);
+  }
 }
 
 .loading-container {
@@ -2851,5 +3400,788 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+/* ========================================
+   TV BOARD LAYOUT STYLES
+   ======================================== */
+
+/* TV Board Container */
+.tv-bingo-board {
+  background-color: #1a222a !important;
+  color: #ffffff;
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+
+.tv-board-main {
+  display: flex;
+  flex-direction: row;
+  border-bottom: 2px solid #10161b;
+}
+
+/* Sidebar Strip */
+.tv-bingo-sidebar {
+  width: 50px;
+  background-color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.tv-sidebar-letter {
+  font-size: 28px;
+  font-weight: 900;
+  color: #c62828;
+  line-height: 1;
+}
+
+/* Numbers Matrix Grid */
+.tv-numbers-grid {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  gap: 6px;
+  background-color: #232b35;
+}
+
+.tv-grid-row {
+  display: grid;
+  grid-template-columns: repeat(15, 1fr);
+  gap: 6px;
+}
+
+.tv-grid-cell {
+  background-color: #2d3745;
+  color: #606f7b;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 700;
+  padding: 6px 0;
+  border-radius: 3px;
+  transition: all 0.3s ease;
+}
+
+.tv-cell--called {
+  background-color: #ffffff !important;
+  color: #1a222a !important;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+}
+
+.tv-cell--latest {
+  background-color: #4caf50 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 15px rgba(76, 175, 80, 0.9);
+  animation: pulse-latest 1s ease-in-out infinite;
+}
+
+@keyframes pulse-latest {
+
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+/* Progress Line Bar */
+.tv-color-progress-bar {
+  display: flex;
+  height: 10px;
+  width: 100%;
+}
+
+.bar-segment {
+  transition: flex 0.3s ease;
+}
+
+.bar-blue {
+  flex: 4;
+  background-color: #0288d1;
+}
+
+.bar-green {
+  flex: 4;
+  background-color: #2e7d32;
+}
+
+.bar-yellow {
+  flex: 2;
+  background-color: #fbc02d;
+}
+
+/* Bottom Footer Bar */
+.tv-board-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background-color: #171d24;
+  gap: 20px;
+}
+
+/* Current Ball Container */
+.tv-current-ball-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Current Ball Ring */
+.tv-current-ball-ring {
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  background-color: #cddc39;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 4px solid #afb42b;
+  box-shadow: 0 4px 12px rgba(205, 220, 57, 0.5);
+}
+
+.tv-current-ball-inner {
+  width: 82px;
+  height: 82px;
+  background: #ffffff;
+  border-radius: 50%;
+  color: #000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.ball-letter-top {
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+  color: #000;
+}
+
+.ball-number-main {
+  font-size: 34px;
+  font-weight: 900;
+  line-height: 1;
+  color: #000;
+}
+
+/* Last Calls Section */
+.tv-last-calls-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: #8898aa;
+  font-weight: 600;
+}
+
+.tv-recent-balls-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.recent-mini-ball {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Control Stack */
+.tv-center-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.control-btn-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 160px;
+}
+
+.control-btn-stack .v-btn {
+  text-transform: none;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.tv-board-extra-controls {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 16px;
+  min-width: 250px;
+  max-width: 330px;
+}
+
+.tv-speed-control,
+.tv-verify-control {
+  width: 145px;
+}
+
+.tv-control-label {
+  color: #78909c;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tv-speed-value {
+  color: #eceff1;
+  font-size: 11px;
+  text-align: center;
+}
+
+.tv-verify-control {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Circular Stat Counters */
+.tv-stats-container {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.tv-stat-circle {
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.circle-green {
+  width: 70px;
+  height: 70px;
+  background-color: #2e7d32;
+  color: #fff;
+}
+
+.circle-orange {
+  width: 70px;
+  height: 70px;
+  background-color: #e65100;
+  color: #fff;
+}
+
+.circle-red-large {
+  width: 110px;
+  height: 110px;
+  background-color: #e53935;
+  border: 4px solid #ffffff;
+  color: #fff;
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: bold;
+  line-height: 1.2;
+}
+
+.stat-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  opacity: 0.9;
+  margin-top: 2px;
+}
+
+.stat-label-top {
+  font-size: 10px;
+  text-transform: uppercase;
+  opacity: 0.9;
+  margin-bottom: 4px;
+}
+
+.stat-value-large {
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+/* Responsive Adjustments for TV Board */
+@media (max-width: 1200px) {
+  .tv-grid-cell {
+    font-size: 18px;
+    padding: 4px 0;
+  }
+
+  .tv-sidebar-letter {
+    font-size: 24px;
+  }
+
+  .tv-current-ball-ring {
+    width: 90px;
+    height: 90px;
+  }
+
+  .tv-current-ball-inner {
+    width: 68px;
+    height: 68px;
+  }
+
+  .ball-number-main {
+    font-size: 28px;
+  }
+
+  .circle-red-large {
+    width: 90px;
+    height: 90px;
+  }
+
+  .stat-value-large {
+    font-size: 24px;
+  }
+}
+
+@media (max-width: 960px) {
+  .tv-board-footer {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .tv-stats-container {
+    width: 100%;
+    justify-content: space-around;
+  }
+
+  .control-btn-stack {
+    width: 100%;
+  }
+
+  .tv-board-extra-controls {
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 600px) {
+  .pattern-settings-inner {
+    padding: 14px 12px 16px;
+  }
+
+  .pattern-settings-heading,
+  .pattern-settings-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .pattern-settings-controls .v-select,
+  .pattern-settings-controls .v-btn {
+    width: 100%;
+  }
+
+  .header-pattern-preview .pattern-card-header {
+    gap: 4px;
+  }
+
+  .header-pattern-preview .pattern-grid {
+    border-spacing: 3px;
+    padding: 4px;
+  }
+
+  .header-pattern-preview .pattern-cell {
+    height: 52px;
+    padding: 6px 2px;
+    font-size: 0.78rem;
+  }
+
+  .tv-grid-cell {
+    font-size: 14px;
+    padding: 2px 0;
+  }
+
+  .tv-sidebar-letter {
+    font-size: 20px;
+  }
+
+  .tv-bingo-sidebar {
+    width: 40px;
+  }
+
+  .tv-grid-row {
+    gap: 3px;
+  }
+
+  .tv-numbers-grid {
+    gap: 3px;
+    padding: 4px;
+  }
+
+  .tv-board-extra-controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .tv-speed-control,
+  .tv-verify-control {
+    width: 100%;
+  }
+}
+
+.bingo-room-terminal {
+  background: #f5f6f8;
+  min-height: 100vh;
+}
+
+.terminal-header {
+  color: #fff;
+  box-shadow: 0 2px 5px rgba(24, 31, 38, 0.2);
+}
+
+.terminal-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 42px;
+  padding: 0 24px;
+  background: linear-gradient(105deg, #9d482b 0%, #b7662d 45%, #d8a911 100%);
+}
+
+.terminal-brand {
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.terminal-brand-logo {
+  width: 28px;
+  height: 28px;
+  margin-right: 7px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.terminal-header-actions {
+  display: flex;
+  align-items: center;
+}
+
+.terminal-user-name {
+  margin: 0 6px 0 2px;
+  color: #fff;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.terminal-color-bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  min-height: 24px;
+  color: #fff;
+}
+
+.bar-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+  font: inherit;
+  min-width: 0;
+}
+
+.tab-black {
+  background: #101114;
+}
+
+.tab-blue {
+  background: #1f73be;
+}
+
+.tab-green {
+  background: #258548;
+}
+
+.tab-yellow {
+  background: #e3b313;
+  color: #171717;
+}
+
+.tab-label {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.terminal-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.terminal-content {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 28px 32px 44px;
+}
+
+.terminal-info-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  margin-bottom: 24px;
+}
+
+.info-box {
+  min-height: 124px;
+  padding: 18px 20px;
+  border: 1px solid #d7dce2;
+  border-radius: 5px;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(35, 45, 55, 0.08);
+}
+
+.info-label {
+  color: #131313;
+  font-size: 1rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.bet-control-wrap {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 14px;
+  overflow: hidden;
+  border: 1px solid #c8ced5;
+  border-radius: 4px;
+  background: #eef0f2;
+}
+
+.bet-btn {
+  width: 42px;
+  height: 38px;
+  border: 0;
+  background: #d9dde1;
+  color: #29313a;
+  font-size: 1.3rem;
+  cursor: pointer;
+}
+
+.bet-input-field {
+  width: 72px;
+  height: 38px;
+  border: 0;
+  border-right: 1px solid #c8ced5;
+  border-left: 1px solid #c8ced5;
+  background: #f8f9fa;
+  color: #20252a;
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.bet-input-field:focus {
+  outline: 2px solid #2378bd;
+  outline-offset: -2px;
+}
+
+.game-number-val {
+  margin: 8px 0 7px;
+  color: #20252a;
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.login-badge-btn {
+  min-width: 76px;
+  font-weight: 700;
+}
+
+.wallet-status-banner {
+  margin-top: 14px;
+  padding: 10px;
+  border-radius: 4px;
+  background: #2e9b55;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.card-grid-container {
+  padding: 22px;
+  border: 1px solid #d7dce2;
+  border-radius: 5px;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(35, 45, 55, 0.08);
+}
+
+.cards-flex-wrap,
+.cards-sub-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px;
+}
+
+.terminal-card-tile {
+  flex: 1 0 72px;
+  max-width: 92px;
+  height: 48px;
+  border: 1px solid #19713d;
+  border-radius: 4px;
+  background: #39a957;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.terminal-card-tile:hover {
+  background: #268c43;
+  transform: translateY(-1px);
+}
+
+.terminal-card-tile:focus-visible,
+.terminal-start-btn:focus-visible,
+.bet-btn:focus-visible,
+.terminal-icon-btn:focus-visible {
+  outline: 3px solid #1f73be;
+  outline-offset: 2px;
+}
+
+.terminal-card-tile.tile-selected {
+  background: #d32f2f;
+  border-color: #a51f1f;
+  box-shadow: inset 0 0 0 2px #8d1717;
+}
+
+.terminal-card-tile.tile-selected:hover {
+  background: #b71c1c;
+}
+
+.cards-sub-row {
+  margin-top: 16px;
+}
+
+.card-catalog-empty {
+  padding: 32px 12px;
+  color: #68717c;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.tile-sub {
+  max-width: 92px;
+}
+
+.card-range-summary {
+  display: flex;
+  justify-content: center;
+  min-height: 26px;
+  margin-top: 12px;
+}
+
+.range-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 56px;
+  min-height: 24px;
+  padding: 3px 12px;
+  border: 1px solid #2c914a;
+  border-radius: 12px;
+  background: #39a957;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.terminal-start-btn {
+  display: block;
+  width: 100%;
+  max-width: 620px;
+  min-height: 52px;
+  margin: 28px auto 0;
+  border: 0;
+  border-radius: 5px;
+  background: #238747;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 3px 6px rgba(26, 91, 49, 0.25);
+}
+
+.terminal-start-btn:hover:not(:disabled) {
+  background: #1c713b;
+}
+
+.terminal-start-btn:disabled {
+  background: #aeb5bb;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+@media (max-width: 700px) {
+  .terminal-header-top {
+    min-height: 38px;
+    padding: 0 12px;
+  }
+
+  .terminal-brand {
+    font-size: 0.78rem;
+  }
+
+  .terminal-user-name {
+    display: none;
+  }
+
+  .terminal-color-bar {
+    min-height: 22px;
+  }
+
+  .terminal-content {
+    padding: 16px 12px 30px;
+  }
+
+  .terminal-info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .terminal-card-tile {
+    flex-basis: 54px;
+    height: 42px;
+  }
 }
 </style>

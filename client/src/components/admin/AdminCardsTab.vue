@@ -97,6 +97,35 @@
                     </template>
                   </v-select>
 
+                  <div v-if="selectedRoomForCardView" class="card-range-setting mt-4">
+                    <v-select
+                      v-model="cardDisplayLimit"
+                      :items="[100, 150, 200, 250, 300, 350, 400]"
+                      label="Player card range"
+                      hint="Players will see cards from 1 through this number"
+                      persistent-hint
+                      variant="outlined"
+                      density="comfortable"
+                      prepend-inner-icon="mdi-format-list-numbered"
+                    >
+                      <template #item="{ props, item }">
+                        <v-list-item v-bind="props" :title="`Cards 1-${item.raw}`" />
+                      </template>
+                      <template #selection="{ item }">
+                        Cards 1-{{ item.raw }}
+                      </template>
+                    </v-select>
+                    <v-btn
+                      class="mt-2"
+                      color="primary"
+                      variant="elevated"
+                      @click="saveCardDisplayLimit"
+                    >
+                      <v-icon class="mr-1">mdi-content-save</v-icon>
+                      Save Player Range
+                    </v-btn>
+                  </div>
+
                   <v-row v-if="selectedRoomForCardView" class="mt-2">
                     <v-col cols="6" sm="3">
                       <v-card variant="tonal" color="primary" class="compact-stat-card">
@@ -521,6 +550,8 @@ const {
   assignedRoomCards,
   availableRoomCards,
   cardGenProgress,
+  cardDisplayLimit,
+  saveCardDisplayLimit,
   cardSearch,
   copyCardsFromRoom,
   copyingCards,
@@ -548,6 +579,7 @@ const {
   showCardPreviewDialog,
   totalRoomCardsPages,
 } = useAdminDashboard();
+
 
 const selectedRoomCardMode = computed(() => {
   const room = rooms.value.find((r: { id: number }) => r.id === selectedRoomForCardView.value);

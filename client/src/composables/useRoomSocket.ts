@@ -72,7 +72,16 @@ export function useRoomSocket(handlers: RoomSocketHandlers) {
     handlers.lastCalledNumber.value = 0;
     handlers.gameStatus.value = 'playing';
     handlers.matchWinners.value = [];
-    handlers.selectedPatternForMatch.value = handlers.currentPattern.value;
+    
+    // Load pattern from the match if available, otherwise use current pattern
+    const matchPattern = updatedRoom?.currentMatch?.pattern;
+    if (matchPattern) {
+      handlers.currentPattern.value = matchPattern;
+      handlers.selectedPatternForMatch.value = matchPattern;
+      console.log(`[RoomSocket] Loaded pattern from match: ${matchPattern}`);
+    } else {
+      handlers.selectedPatternForMatch.value = handlers.currentPattern.value;
+    }
   };
 
   const onPaused = () => {

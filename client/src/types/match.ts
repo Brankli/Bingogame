@@ -6,5 +6,6 @@ export interface Match {
   id: number;
   closed?: boolean;
   soldCards?: number;
+  pattern?: string;
   matchNumbers?: MatchNumber[];
 }

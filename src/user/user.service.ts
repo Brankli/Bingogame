@@ -154,7 +154,8 @@ export class UserService {
       { id: userId },
       {
         totalEarnings: balanceAfter,
-        houseFee: type === 'add' ? (user.houseFee || 0) + amount : user.houseFee,
+        houseFee:
+          type === 'add' ? (user.houseFee || 0) + amount : user.houseFee,
       },
     );
 

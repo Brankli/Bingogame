@@ -18,6 +18,7 @@ import { mapToRoomDto, RoomDto } from './dto/room.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { User } from '../decorators/user.decorator';
 import { TicketPriceDto } from './dto/ticket-price.dto';
+import { CardDisplayLimitDto } from './dto/card-display-limit.dto';
 import { ResetPrizeDto } from './dto/reset-prize.dto';
 import {
   BINGO_BRONZE_START_BALLS,
@@ -90,6 +91,18 @@ export class RoomController {
   ): Promise<RoomDto> {
     const room = await this.roomService.update(id, {
       ticketPrice: +ticketPriceDto.ticketPrice,
+    });
+    return mapToRoomDto(room);
+  }
+
+  @UseGuards(JwtAuthGuard, RoomManagerGuard)
+  @Post(':id/card-display-limit')
+  async cardDisplayLimit(
+    @Param('id') id: number,
+    @Body() cardDisplayLimitDto: CardDisplayLimitDto,
+  ): Promise<RoomDto> {
+    const room = await this.roomService.update(id, {
+      cardDisplayLimit: cardDisplayLimitDto.cardDisplayLimit,
     });
     return mapToRoomDto(room);
   }
@@ -189,6 +202,11 @@ export class RoomController {
     return this.roomService.getRoomCardStatus(id);
   }
 
+  @Get(':id/cards')
+  async getRoomCardCatalog(@Param('id', ParseIntPipe) id: number) {
+    return this.roomService.getRoomCardCatalog(id);
+  }
+
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @Get(':id/cards/preview')
@@ -223,7 +241,10 @@ export class RoomController {
     @Param('id', ParseIntPipe) id: number,
     @Body() body: { reset?: boolean } = {},
   ) {
-    const result = await this.roomService.generateCardsForExistingRoom(id, body);
+    const result = await this.roomService.generateCardsForExistingRoom(
+      id,
+      body,
+    );
     return {
       success: result.status !== 'failed',
       ...result,

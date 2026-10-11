@@ -33,7 +33,9 @@ export class RolesGuard implements CanActivate {
 
     if (!allowed) {
       throw new ForbiddenException(
-        `Admin access required. Your account role is "${user.role ?? 'unknown'}". Log in as an admin user.`,
+        `Admin access required. Your account role is "${
+          user.role ?? 'unknown'
+        }". Log in as an admin user.`,
       );
     }
 

@@ -84,7 +84,9 @@ export function pickColumnValues(
   // Fallback: spread picks across the range (still non-consecutive when possible)
   const step = Math.max(1, Math.floor(pool.length / count));
   const spread: number[] = [];
-  let start = Math.floor(rng.next() * Math.max(1, pool.length - step * count));
+  const start = Math.floor(
+    rng.next() * Math.max(1, pool.length - step * count),
+  );
   for (let i = 0; i < count; i++) {
     spread.push(pool[Math.min(pool.length - 1, start + i * step)]);
   }

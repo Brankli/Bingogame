@@ -25,12 +25,7 @@ const getStaticFilesPath = () => {
     const resourcesPath =
       (process as any).resourcesPath || path.join(__dirname, '..', '..');
 
-    return path.join(
-      resourcesPath,
-      'app.asar.unpacked',
-      'client',
-      'dist',
-    );
+    return path.join(resourcesPath, 'app.asar.unpacked', 'client', 'dist');
   }
 
   return join(__dirname, '..', 'client/dist');
@@ -55,21 +50,21 @@ const getStaticFilesPath = () => {
     ...(isElectron
       ? []
       : process.env.REDIS_HOST
-        ? [
-            CacheModule.register<ClientOpts>({
-              isGlobal: true,
-              store: redisStore,
-              host: process.env.REDIS_HOST,
-              port: Number(process.env.REDIS_PORT),
-            }),
-          ]
-        : [
-            CacheModule.register({
-              isGlobal: true,
-              ttl: 300,
-              max: 100,
-            }),
-          ]),
+      ? [
+          CacheModule.register<ClientOpts>({
+            isGlobal: true,
+            store: redisStore,
+            host: process.env.REDIS_HOST,
+            port: Number(process.env.REDIS_PORT),
+          }),
+        ]
+      : [
+          CacheModule.register({
+            isGlobal: true,
+            ttl: 300,
+            max: 100,
+          }),
+        ]),
 
     RoomModule,
     AuthModule,

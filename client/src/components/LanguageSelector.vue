@@ -17,7 +17,7 @@
 /* eslint-disable no-undef */
 import { ref, onMounted } from 'vue';
 
-const currentLanguage = ref('en');
+const currentLanguage = ref('am');
 
 const emit = defineEmits<{
   (e: 'language-changed', lang: string): void

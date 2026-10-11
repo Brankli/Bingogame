@@ -14,8 +14,8 @@ export function getApiUrl(): string {
     return 'http://localhost:3000';
   }
 
-  // Web frontend → Render backend
-  const apiUrl = 'https://bingogame-8v2z.onrender.com';
+  // Web frontend - use environment variable or fallback to production
+  const apiUrl = process.env.VUE_APP_API_URL || 'https://bingogame-8v2z.onrender.com';
 
   console.log('🔗 Running in web, using', apiUrl);
 

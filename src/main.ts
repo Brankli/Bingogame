@@ -88,14 +88,7 @@ async function bootstrap() {
   const corsOrigins = getCorsOrigins();
 
   app.enableCors({
-    origin:
-      corsOrigins === true
-        ? true
-        : [
-            'https://bingogame-1-79so.onrender.com',
-            'http://localhost:8080',
-            'http://localhost:5173',
-          ],
+    origin: corsOrigins === true ? true : corsOrigins,
     credentials: true,
   });
 

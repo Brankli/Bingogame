@@ -58,22 +58,24 @@
                 hide-details
               />
             </v-col>
-            <v-col cols="12" md="1">
+            <v-col cols="12" sm="auto">
               <v-btn 
+                block
                 color="secondary" 
-                block 
                 @click="clearFilters"
                 :disabled="!hasActiveFilters"
               >
                 <v-icon>mdi-filter-off</v-icon>
+                <span class="ml-1 d-none d-sm-inline">Clear</span>
               </v-btn>
             </v-col>
           </v-row>
         </v-card-text>
       </v-card>
 
-      <!-- Users Table -->
-      <v-table class="elevation-1 user-table" v-if="filteredUsers.length > 0">
+      <!-- Users Table (Desktop) -->
+      <div v-if="mdAndUp && filteredUsers.length > 0" style="overflow-x: auto">
+        <v-table class="elevation-1 user-table">
         <thead>
           <tr>
             <th class="text-left">Username</th>
@@ -270,6 +272,295 @@
           </tr>
         </tbody>
       </v-table>
+      </div>
+
+      <!-- Users Card List (Mobile/Tablet) -->
+      <div v-if="!mdAndUp && filteredUsers.length > 0" class="mobile-users-list">
+        <v-card v-for="u in paginatedFilteredUsers" :key="u.id" class="mb-3" elevation="2">
+          <v-card-title class="d-flex align-center justify-space-between py-3">
+            <div class="d-flex align-center">
+              <v-badge :color="getActivityColor(u.lastActive)" dot inline class="mr-2" />
+              <span class="font-weight-bold">{{ u.username }}</span>
+            </div>
+            <v-chip :color="u.role === 'admin' ? 'error' : 'primary'" size="small">
+              {{ String(u.role || '').toUpperCase() }}
+            </v-chip>
+          </v-card-title>
+          
+          <v-card-text>
+            <v-row dense>
+              <v-col cols="6">
+                <div class="text-caption text-grey">House Fee</div>
+                <div v-if="editingUserId === u.id">
+                  <v-text-field
+                    v-model.number="editForm.houseFee"
+                    type="number"
+                    density="compact"
+                    hide-details
+                    variant="outlined"
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+                <div v-else class="font-weight-medium">{{ formatFee(u.houseFee) }} Birr</div>
+              </v-col>
+              <v-col cols="6">
+                <div class="text-caption text-grey">Total Earnings</div>
+                <v-menu v-if="u.role === 'user'">
+                  <template v-slot:activator="{ props }">
+                    <v-chip 
+                      v-bind="props" 
+                      color="success" 
+                      size="small"
+                      class="cursor-pointer"
+                    >
+                      {{ formatFee(u.totalEarnings || 0) }} Birr
+                      <v-icon end size="x-small">mdi-chevron-down</v-icon>
+                    </v-chip>
+                  </template>
+                  <v-list density="compact">
+                    <v-list-item @click="viewEarningsHistory(u)">
+                      <template v-slot:prepend>
+                        <v-icon size="small">mdi-history</v-icon>
+                      </template>
+                      <v-list-item-title>View History</v-list-item-title>
+                    </v-list-item>
+                    <v-list-item @click="openAdjustEarnings(u, 'add')">
+                      <template v-slot:prepend>
+                        <v-icon size="small" color="success">mdi-plus-circle</v-icon>
+                      </template>
+                      <v-list-item-title>Add Earnings</v-list-item-title>
+                    </v-list-item>
+                    <v-list-item @click="openAdjustEarnings(u, 'subtract')">
+                      <template v-slot:prepend>
+                        <v-icon size="small" color="warning">mdi-minus-circle</v-icon>
+                      </template>
+                      <v-list-item-title>Subtract Earnings</v-list-item-title>
+                    </v-list-item>
+                    <v-list-item @click="openAdjustEarnings(u, 'payout')">
+                      <template v-slot:prepend>
+                        <v-icon size="small" color="info">mdi-bank-transfer</v-icon>
+                      </template>
+                      <v-list-item-title>Process Payout</v-list-item-title>
+                    </v-list-item>
+                    <v-divider />
+                    <v-list-item @click="openAdjustEarnings(u, 'reset')">
+                      <template v-slot:prepend>
+                        <v-icon size="small" color="error">mdi-refresh</v-icon>
+                      </template>
+                      <v-list-item-title>Reset Earnings</v-list-item-title>
+                    </v-list-item>
+                  </v-list>
+                </v-menu>
+                <span v-else>-</span>
+              </v-col>
+              <v-col cols="6">
+                <div class="text-caption text-grey">Last Active</div>
+                <small>{{ formatDate(u.lastActive) }}</small>
+              </v-col>
+              <v-col cols="6">
+                <div class="text-caption text-grey">Status</div>
+                <small :style="{ color: getActivityColor(u.lastActive) }">
+                  {{ getActivityText(u.lastActive) }}
+                </small>
+              </v-col>
+              <v-col v-if="editingUserId === u.id" cols="12">
+                <div class="text-caption text-grey mb-1">Role</div>
+                <v-select
+                  v-model="editForm.role"
+                  :items="roleOptions"
+                  item-title="title"
+                  item-value="value"
+                  density="compact"
+                  hide-details
+                  variant="outlined"
+                />
+              </v-col>
+            </v-row>
+          </v-card-text>
+          
+          <v-card-actions class="justify-end flex-wrap pa-3">
+            <v-btn
+              v-if="editingUserId !== u.id"
+              color="primary"
+              variant="text"
+              size="small"
+              @click="startEditUser(u)"
+            >
+              <v-icon>mdi-pencil</v-icon>
+            </v-btn>
+            <v-btn
+              v-if="editingUserId === u.id"
+              color="success"
+              variant="text"
+              size="small"
+              @click="saveUser(u.id)"
+            >
+              <v-icon>mdi-content-save</v-icon>
+            </v-btn>
+            <v-btn
+              v-if="editingUserId === u.id"
+              color="secondary"
+              variant="text"
+              size="small"
+              @click="cancelEditUser"
+            >
+              <v-icon>mdi-close</v-icon>
+            </v-btn>
+            <v-btn
+              v-if="u.role !== 'admin'"
+              color="warning"
+              variant="text"
+              size="small"
+              @click="makeAdmin(u.id)"
+            >
+              <v-icon>mdi-shield-crown</v-icon>
+            </v-btn>
+            <v-btn
+              v-else
+              color="info"
+              variant="text"
+              size="small"
+              @click="removeAdmin(u.id)"
+            >
+              <v-icon>mdi-shield-remove</v-icon>
+            </v-btn>
+            <v-btn
+              color="error"
+              variant="text"
+              size="small"
+              @click="deleteUser(u.id)"
+            >
+              <v-icon>mdi-delete</v-icon>
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </div>
+
+      <!-- Users Cards (Mobile) -->
+      <div class="d-md-none" v-if="filteredUsers.length > 0">
+        <v-card
+          v-for="u in paginatedFilteredUsers"
+          :key="u.id"
+          class="mb-3 user-mobile-card"
+          elevation="2"
+        >
+          <v-card-text>
+            <!-- Header Row -->
+            <div class="d-flex align-center justify-space-between mb-3">
+              <div class="d-flex align-center">
+                <v-badge
+                  :color="getActivityColor(u.lastActive)"
+                  dot
+                  class="mr-2"
+                />
+                <div>
+                  <div class="text-h6">{{ u.username }}</div>
+                  <div class="text-caption text-grey">
+                    {{ getActivityText(u.lastActive) }}
+                  </div>
+                </div>
+              </div>
+              <v-chip
+                :color="u.role === 'admin' ? 'error' : 'primary'"
+                variant="elevated"
+                size="small"
+              >
+                {{ String(u.role || '').toUpperCase() }}
+              </v-chip>
+            </div>
+
+            <!-- User Details -->
+            <v-divider class="my-2" />
+            
+            <div class="d-flex flex-column gap-2 mb-3">
+              <div class="d-flex justify-space-between">
+                <span class="text-caption text-grey">House Fee:</span>
+                <span class="font-weight-medium">{{ formatFee(u.houseFee) }} Birr</span>
+              </div>
+              
+              <div class="d-flex justify-space-between" v-if="u.role === 'user'">
+                <span class="text-caption text-grey">Earnings:</span>
+                <v-chip 
+                  color="success" 
+                  size="small"
+                  @click="viewEarningsHistory(u)"
+                  class="cursor-pointer"
+                >
+                  {{ formatFee(u.totalEarnings || 0) }} Birr
+                  <v-icon end size="small">mdi-eye</v-icon>
+                </v-chip>
+              </div>
+              
+              <div class="d-flex justify-space-between">
+                <span class="text-caption text-grey">Created:</span>
+                <span class="text-caption">{{ formatDate(u.createdAt) }}</span>
+              </div>
+              
+              <div class="d-flex justify-space-between">
+                <span class="text-caption text-grey">Last Active:</span>
+                <span class="text-caption">{{ formatDate(u.lastActive) }}</span>
+              </div>
+            </div>
+
+            <!-- Actions -->
+            <v-divider class="my-2" />
+            <div class="d-flex flex-wrap gap-1 justify-end">
+              <v-btn
+                color="primary"
+                variant="tonal"
+                size="small"
+                @click="startEditUser(u)"
+                title="Edit User"
+              >
+                <v-icon size="small">mdi-pencil</v-icon>
+              </v-btn>
+              
+              <v-btn
+                v-if="u.role === 'user'"
+                color="success"
+                variant="tonal"
+                size="small"
+                @click="openAdjustEarnings(u, 'add')"
+                title="Adjust Earnings"
+              >
+                <v-icon size="small">mdi-currency-usd</v-icon>
+              </v-btn>
+              
+              <v-btn
+                v-if="u.role !== 'admin'"
+                color="warning"
+                variant="tonal"
+                size="small"
+                @click="makeAdmin(u.id)"
+                title="Make Admin"
+              >
+                <v-icon size="small">mdi-shield-crown</v-icon>
+              </v-btn>
+              <v-btn
+                v-else
+                color="info"
+                variant="tonal"
+                size="small"
+                @click="removeAdmin(u.id)"
+                title="Remove Admin"
+              >
+                <v-icon size="small">mdi-shield-remove</v-icon>
+              </v-btn>
+              
+              <v-btn
+                color="error"
+                variant="tonal"
+                size="small"
+                @click="deleteUser(u.id)"
+                title="Delete User"
+              >
+                <v-icon size="small">mdi-delete</v-icon>
+              </v-btn>
+            </div>
+          </v-card-text>
+        </v-card>
+      </div>
 
       <!-- Empty State -->
       <v-alert v-if="filteredUsers.length === 0" type="warning" variant="tonal" class="mt-4">
@@ -433,6 +724,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, inject, watch } from 'vue';
+import { useDisplay } from 'vuetify';
 import { useAdminDashboard } from '@/composables/useAdminDashboard';
 import type { Services } from '@/services';
 import {
@@ -442,6 +734,8 @@ import {
   matchesActivityFilter,
   useEarningsManagement,
 } from '@/composables/useUserTracking';
+
+const { mdAndUp } = useDisplay();
 
 const services = inject<Services>('services');
 
@@ -691,5 +985,25 @@ onMounted(() => {
 
 .user-table tbody tr:hover {
   background-color: rgba(102, 126, 234, 0.05);
+}
+
+.user-mobile-card {
+  border-radius: 12px !important;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.gap-2 {
+  gap: 8px;
+}
+
+.gap-1 {
+  gap: 4px;
+}
+
+@media (max-width: 959px) {
+  .user-mobile-card {
+    margin-left: 0;
+    margin-right: 0;
+  }
 }
 </style>

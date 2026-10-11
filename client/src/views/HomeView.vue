@@ -4,8 +4,8 @@
     <v-app-bar color="white" elevation="1" class="modern-header" v-if="logged">
       <v-container class="d-flex align-center">
         <div class="d-flex align-center">
-          <v-avatar color="primary" size="40" class="mr-3">
-            <v-icon color="white">mdi-cards</v-icon>
+          <v-avatar size="40" class="mr-3 app-logo-avatar">
+            <v-img src="/img/asmat-bingo-logo.png" alt="Asmat Bingo logo" cover />
           </v-avatar>
           <div>
             <div class="app-name">Bingo Game</div>
@@ -33,13 +33,13 @@
       <v-container>
         <div class="hero-content">
           <div class="hero-icon-wrapper">
-            <v-avatar color="white" size="120" class="hero-icon">
-              <v-icon size="60" color="primary">mdi-cards-playing-outline</v-icon>
+            <v-avatar size="120" class="hero-icon">
+              <v-img src="/img/asmat-bingo-logo.png" alt="Asmat Bingo logo" cover />
             </v-avatar>
           </div>
-          
+
           <h1 class="hero-title">Welcome to Bingo Game</h1>
-          <p class="hero-subtitle">Your ultimate bingo gaming experience</p>
+          
 
           <!-- Admin Section -->
           <v-card v-if="isAdmin" class="action-card admin-card" elevation="8">
@@ -77,14 +77,7 @@
                 </div>
               </div>
 
-              <v-btn
-                color="primary"
-                size="x-large"
-                block
-                elevation="2"
-                @click="goToAdminDashboard"
-                class="admin-btn"
-              >
+              <v-btn color="primary" size="x-large" block elevation="2" @click="goToAdminDashboard" class="admin-btn">
                 <v-icon class="mr-2">mdi-view-dashboard</v-icon>
                 Open Admin Dashboard
               </v-btn>
@@ -99,13 +92,11 @@
                 <v-avatar color="warning" size="64" class="mb-4">
                   <v-icon color="white" size="32">mdi-lock-alert</v-icon>
                 </v-avatar>
-                <h3 class="text-h6 font-weight-bold mb-2">Authentication Required</h3>
-                <p class="text-body-2 text-grey mb-4">
-                  Please contact an administrator to create your account
-                </p>
+                <h3 class="text-h6 font-weight-bold mb-2">Contact</h3>
+                
                 <v-btn color="warning" variant="outlined" size="large">
-                  <v-icon class="mr-2">mdi-email</v-icon>
-                  Contact Admin
+                  <v-icon class="mr-2">mdi-phone</v-icon>
+                   +251925296413
                 </v-btn>
               </v-card-text>
             </v-card>
@@ -129,12 +120,7 @@
 
                 <!-- Loading State -->
                 <div v-if="loadingManagedRooms" class="text-center py-8">
-                  <v-progress-circular
-                    indeterminate
-                    color="primary"
-                    size="48"
-                    class="mb-3"
-                  ></v-progress-circular>
+                  <v-progress-circular indeterminate color="primary" size="48" class="mb-3"></v-progress-circular>
                   <p class="text-body-2 text-grey">Loading your rooms...</p>
                 </div>
 
@@ -149,13 +135,7 @@
 
                 <!-- Rooms List -->
                 <div v-else class="rooms-grid">
-                  <v-card
-                    v-for="room in managedRooms"
-                    :key="room.id"
-                    class="room-item"
-                    elevation="2"
-                    hover
-                  >
+                  <v-card v-for="room in managedRooms" :key="room.id" class="room-item" elevation="2" hover>
                     <v-card-text class="pa-4">
                       <div class="d-flex align-center justify-space-between mb-3">
                         <h4 class="text-h6 font-weight-bold">{{ room.name }}</h4>
@@ -172,12 +152,7 @@
                         </div>
                       </div>
 
-                      <v-btn
-                        color="primary"
-                        variant="elevated"
-                        block
-                        @click="openManagedRoom(room.id)"
-                      >
+                      <v-btn color="primary" variant="elevated" block @click="openManagedRoom(room.id)">
                         <v-icon class="mr-2">mdi-login-variant</v-icon>
                         Enter Room
                       </v-btn>
@@ -192,56 +167,17 @@
     </div>
 
     <!-- Features Section -->
-    <div class="features-section">
-      <v-container>
-        <h2 class="section-title text-center mb-8">Why Choose Our Platform?</h2>
-        <v-row>
-          <v-col cols="12" md="4">
-            <div class="feature-card">
-              <v-avatar color="primary" size="64" class="mb-4">
-                <v-icon color="white" size="32">mdi-lightning-bolt</v-icon>
-              </v-avatar>
-              <h3 class="text-h6 font-weight-bold mb-2">Fast & Reliable</h3>
-              <p class="text-body-2 text-grey">
-                Real-time gameplay with instant updates and smooth performance
-              </p>
-            </div>
-          </v-col>
-          <v-col cols="12" md="4">
-            <div class="feature-card">
-              <v-avatar color="success" size="64" class="mb-4">
-                <v-icon color="white" size="32">mdi-shield-check</v-icon>
-              </v-avatar>
-              <h3 class="text-h6 font-weight-bold mb-2">Secure Platform</h3>
-              <p class="text-body-2 text-grey">
-                Your data and gameplay are protected with enterprise-grade security
-              </p>
-            </div>
-          </v-col>
-          <v-col cols="12" md="4">
-            <div class="feature-card">
-              <v-avatar color="warning" size="64" class="mb-4">
-                <v-icon color="white" size="32">mdi-trophy</v-icon>
-              </v-avatar>
-              <h3 class="text-h6 font-weight-bold mb-2">Win Big</h3>
-              <p class="text-body-2 text-grey">
-                Exciting prizes and rewards for winners in every game
-              </p>
-            </div>
-          </v-col>
-        </v-row>
-      </v-container>
-    </div>
+    
 
     <!-- Footer -->
     <div class="modern-footer">
       <v-container>
         <div class="text-center">
           <p class="text-body-2 text-grey mb-2">
-            © 2024 Bingo Game. All rights reserved.
+            © 2026 Bingo Game. All rights reserved.
           </p>
           <p class="text-caption text-grey">
-            Powered by modern web technologies
+            Powered by Abiyot
           </p>
         </div>
       </v-container>
@@ -259,20 +195,10 @@
             Are you sure you want to logout?
           </p>
           <div class="d-flex gap-2">
-            <v-btn
-              color="grey"
-              variant="outlined"
-              block
-              @click="showLogoutDialog = false"
-            >
+            <v-btn color="grey" variant="outlined" block @click="showLogoutDialog = false">
               Cancel
             </v-btn>
-            <v-btn
-              color="error"
-              variant="elevated"
-              block
-              @click="logout"
-            >
+            <v-btn color="error" variant="elevated" block @click="logout">
               <v-icon class="mr-1">mdi-logout</v-icon>
               Logout
             </v-btn>
@@ -302,10 +228,20 @@ const showLogoutDialog = ref(false);
 // Computed
 const isAdmin = computed(() => String(user.value?.role || '').toLowerCase() === 'admin');
 type ManagedRoom = { id: number; name: string; ticketPrice?: number };
+type RawManagedRoom = {
+  id?: unknown;
+  name?: unknown;
+  ticketPrice?: unknown;
+  room?: {
+    id?: unknown;
+    name?: unknown;
+    ticketPrice?: unknown;
+  };
+};
 const managedRooms = ref<ManagedRoom[]>([]);
 const loadingManagedRooms = ref(false);
 
-function resolveRoomId(room: any): number | null {
+function resolveRoomId(room: RawManagedRoom): number | null {
   const direct = Number(room?.id);
   if (Number.isFinite(direct) && direct > 0) return direct;
   const nested = Number(room?.room?.id);
@@ -313,9 +249,10 @@ function resolveRoomId(room: any): number | null {
   return null;
 }
 
-function normalizeManagedRooms(rawRooms: any[]): ManagedRoom[] {
+function normalizeManagedRooms(rawRooms: unknown[]): ManagedRoom[] {
   return rawRooms
-    .map((room) => {
+    .filter((room): room is RawManagedRoom => typeof room === 'object' && room !== null)
+    .map((room): ManagedRoom | null => {
       const id = resolveRoomId(room);
       if (!id) return null;
       return {
@@ -324,7 +261,7 @@ function normalizeManagedRooms(rawRooms: any[]): ManagedRoom[] {
         ticketPrice: Number(room?.ticketPrice || room?.room?.ticketPrice || 0),
       };
     })
-    .filter((room): room is ManagedRoom => Boolean(room));
+    .filter((room): room is ManagedRoom => room !== null);
 }
 
 async function loadManagedRooms() {
@@ -392,7 +329,7 @@ onBeforeUnmount(() => {
   min-height: 100vh;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   position: relative;
-  
+
   &::before {
     content: '';
     position: absolute;
@@ -400,7 +337,7 @@ onBeforeUnmount(() => {
     left: 0;
     right: 0;
     bottom: 0;
-    background: 
+    background:
       radial-gradient(circle at 20% 50%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
       radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
     pointer-events: none;
@@ -411,24 +348,29 @@ onBeforeUnmount(() => {
 .modern-header {
   background: white !important;
   border-bottom: 1px solid #e0e0e0;
-  
+
+  .app-logo-avatar {
+    border: 1px solid #d9dee5;
+    background: #fff;
+  }
+
   .app-name {
     font-size: 1.1rem;
     font-weight: 700;
     color: #2c3e50;
     line-height: 1.2;
   }
-  
+
   .app-tagline {
     font-size: 0.75rem;
     color: #8898aa;
     line-height: 1.2;
   }
-  
+
   .user-chip {
     font-weight: 600;
   }
-  
+
   .logout-btn {
     color: #5a6c7d;
   }
@@ -450,16 +392,19 @@ onBeforeUnmount(() => {
 .hero-icon-wrapper {
   margin-bottom: 32px;
   animation: float 3s ease-in-out infinite;
-  
+
   .hero-icon {
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
   }
 }
 
 @keyframes float {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: translateY(0px);
   }
+
   50% {
     transform: translateY(-20px);
   }
@@ -471,7 +416,7 @@ onBeforeUnmount(() => {
   color: white;
   margin-bottom: 16px;
   text-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  
+
   @media (max-width: 600px) {
     font-size: 2rem;
   }
@@ -497,6 +442,7 @@ onBeforeUnmount(() => {
     opacity: 0;
     transform: translateY(30px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -519,7 +465,7 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 12px;
-  
+
   @media (max-width: 600px) {
     grid-template-columns: 1fr;
   }
@@ -545,7 +491,7 @@ onBeforeUnmount(() => {
 .empty-state {
   text-align: center;
   padding: 48px 24px;
-  
+
   h4 {
     color: #2c3e50;
   }
@@ -562,7 +508,7 @@ onBeforeUnmount(() => {
   border-radius: 16px !important;
   border: 2px solid transparent;
   transition: all 0.3s ease;
-  
+
   &:hover {
     border-color: #1cc88a;
     transform: translateY(-4px);
@@ -592,7 +538,7 @@ onBeforeUnmount(() => {
   font-size: 2.5rem;
   font-weight: 700;
   color: #2c3e50;
-  
+
   @media (max-width: 600px) {
     font-size: 1.75rem;
   }
@@ -603,11 +549,11 @@ onBeforeUnmount(() => {
   padding: 32px 24px;
   border-radius: 16px;
   transition: transform 0.3s ease;
-  
+
   &:hover {
     transform: translateY(-8px);
   }
-  
+
   h3 {
     color: #2c3e50;
   }
@@ -631,7 +577,7 @@ onBeforeUnmount(() => {
   .hero-section {
     padding: 40px 0 30px;
   }
-  
+
   .features-section {
     padding: 40px 0;
   }

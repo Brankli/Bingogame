@@ -22,6 +22,9 @@ export class Match {
   @Column('simple-array', { nullable: true })
   registeredCards?: string[];
 
+  @Column({ default: 'twoline', nullable: true })
+  pattern?: string;
+
   @ManyToOne(() => Room, (room) => room.matches, { onDelete: 'CASCADE' })
   room!: Room;
 

@@ -31,6 +31,7 @@ let adminDataInitialized = false;
 const showLogoutDialog = ref(false);
 const drawer = ref(true);
 const rail = ref(false);
+const mobile = ref(false);
 const toast = ref<{ show: boolean; message: string; color: string }>({
   show: false,
   message: '',
@@ -126,6 +127,7 @@ const selectedUserForCard = ref<number | null>(null);
 const selectedCardNumber = ref<string | null>(null);
 const selectedRoomForCardView = ref<number | null>(null);
 const selectedSourceRoom = ref<number | null>(null);
+const cardDisplayLimit = ref(400);
 
 // Pagination
 const usersPage = ref(1);
@@ -378,6 +380,8 @@ async function loadRoomCards() {
   if (!selectedRoomForCardView.value) return;
 
   try {
+    const selectedRoom = rooms.value.find((room: { id: number }) => room.id === selectedRoomForCardView.value);
+    cardDisplayLimit.value = selectedRoom?.cardDisplayLimit ?? 400;
     const response = await services?.cardService.getByRoom(
       selectedRoomForCardView.value,
       { summary: true },
@@ -388,6 +392,24 @@ async function loadRoomCards() {
   } catch (error) {
     console.error('Error loading room cards:', error);
     showToast('Failed to load room cards: ' + getErrorMessage(error), 'error');
+  }
+}
+
+async function saveCardDisplayLimit() {
+  if (!selectedRoomForCardView.value) return;
+
+  try {
+    await services?.roomService.cardDisplayLimit(
+      selectedRoomForCardView.value,
+      cardDisplayLimit.value,
+    );
+    const room = rooms.value.find((item: { id: number }) => item.id === selectedRoomForCardView.value);
+    if (room) {
+      room.cardDisplayLimit = cardDisplayLimit.value;
+    }
+    showToast(`Player card range updated to 1-${cardDisplayLimit.value}.`, 'success');
+  } catch (error) {
+    showToast('Failed to update card range: ' + getErrorMessage(error), 'error');
   }
 }
 
@@ -922,6 +944,21 @@ function ensureAdminAccess() {
 // Socket events
 onMounted(() => {
   ensureAdminAccess();
+  
+  // Mobile detection
+  const checkMobile = () => {
+    mobile.value = window.innerWidth < 960;
+    if (mobile.value) {
+      drawer.value = false;
+      rail.value = false;
+    }
+  };
+  checkMobile();
+  window.addEventListener('resize', checkMobile);
+  
+  onBeforeUnmount(() => {
+    window.removeEventListener('resize', checkMobile);
+  });
 });
 
 onBeforeUnmount(() => {
@@ -932,6 +969,7 @@ onBeforeUnmount(() => {
     showLogoutDialog,
     drawer,
     rail,
+    mobile,
     toast,
     confirmDialog,
     cancelConfirm,
@@ -963,6 +1001,7 @@ onBeforeUnmount(() => {
     selectedUserForCard,
     selectedCardNumber,
     selectedRoomForCardView,
+    cardDisplayLimit,
     selectedSourceRoom,
     usersPage,
     usersPerPage,
@@ -1003,6 +1042,7 @@ onBeforeUnmount(() => {
     loadRooms,
     loadCards,
     loadRoomCards,
+    saveCardDisplayLimit,
     roomCardStatus,
     cardGenProgress,
     previewCardData,

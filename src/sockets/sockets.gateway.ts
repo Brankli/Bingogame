@@ -116,7 +116,9 @@ export class SocketsGateway
     @MessageBody('roomId') roomId: number,
     @MessageBody('soldCards') soldCards: number,
     @MessageBody('houseFeePerCard') houseFeePerCard?: number,
+    @MessageBody('betAmount') betAmount?: number,
     @MessageBody('registeredCards') registeredCards?: string[],
+    @MessageBody('pattern') pattern?: string,
   ): Promise<void> {
     try {
       this.logger.log(
@@ -125,6 +127,7 @@ export class SocketsGateway
       this.logger.log(`[SocketGateway] Room ID: ${roomId}`);
       this.logger.log(`[SocketGateway] Sold Cards: ${soldCards}`);
       this.logger.log(`[SocketGateway] House Fee: ${houseFeePerCard}`);
+      this.logger.log(`[SocketGateway] Pattern: ${pattern || 'twoline'}`);
       this.logger.log(`[SocketGateway] Registered Cards:`, registeredCards);
 
       const user = this.getAuthenticatedUser(client);
@@ -143,12 +146,21 @@ export class SocketsGateway
       await this.roomService.startMatch(room, {
         soldCards,
         registeredCards: registeredCards || [],
+        pattern: pattern || 'twoline',
       });
       this.logger.log(`[SocketGateway] ✅ Match started successfully`);
 
-      // Calculate and add house fee earnings
-      const feePerCard = houseFeePerCard || 2; // Default 2 Birr per card
-      const totalHouseFee = soldCards * feePerCard;
+      // Calculate commission as a percentage of each card's bet.
+      const commissionPercent = Math.min(
+        100,
+        Math.max(20, Number(houseFeePerCard) || 20),
+      );
+      const amountPerCard = Math.max(
+        0,
+        Number(betAmount) || Number(room.ticketPrice) || 0,
+      );
+      const totalHouseFee =
+        soldCards * amountPerCard * (commissionPercent / 100);
 
       // Add earnings to room owner (or the user who started the game)
       const roomOwnerId = room.owner?.id || user.id;

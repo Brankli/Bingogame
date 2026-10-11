@@ -9,6 +9,7 @@ import { CreateRoomDto } from './dto/create-room.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Room } from './entities/room.entity';
 import { Repository } from 'typeorm';
+import { Like } from 'typeorm';
 import { User } from '../user/entities/user.entity';
 import { MatchService } from '../match/match.service';
 import { SocketsGateway } from '../sockets/sockets.gateway';
@@ -37,6 +38,7 @@ import { Card } from '../card/entities/card.entity';
 import { CreateMatchDto } from '../match/dto/create-match.dto';
 import {
   RoomCardGenerationResult,
+  RoomCardCatalogDto,
   RoomCardPreviewDto,
   RoomCardStatusDto,
 } from './dto/room-cards.dto';
@@ -189,16 +191,26 @@ export class RoomService {
 
     const existingIndices = new Set<number>();
     const existing = await this.cardRepository.find({
-      where: { isStaticTemplate: true },
-      select: ['cardNumber', 'templateIndex'],
+      where: { cardNumber: Like('STATIC-CAR%') },
+      relations: ['room'],
     });
     for (const card of existing) {
       const idx =
-        card.templateIndex ??
-        parseStaticTemplateIndex(card.cardNumber) ??
-        null;
-      if (idx != null) {
-        existingIndices.add(idx);
+        card.templateIndex ?? parseStaticTemplateIndex(card.cardNumber) ?? null;
+      if (idx == null) {
+        continue;
+      }
+      if (card.room) {
+        throw new BadRequestException(
+          `Static card ${card.cardNumber} is already assigned to a room and cannot be used by the shared library.`,
+        );
+      }
+      existingIndices.add(idx);
+      if (!card.isStaticTemplate || card.templateIndex !== idx) {
+        card.isStaticTemplate = true;
+        card.templateIndex = idx;
+        card.isActive = true;
+        await this.cardRepository.save(card);
       }
     }
 
@@ -478,7 +490,10 @@ export class RoomService {
     };
   }
 
-  async previewRoomCard(roomId: number, index = 1): Promise<RoomCardPreviewDto> {
+  async previewRoomCard(
+    roomId: number,
+    index = 1,
+  ): Promise<RoomCardPreviewDto> {
     const safeIndex = Math.min(400, Math.max(1, Math.floor(index)));
     const room = await this.roomRepository.findOne({ where: { id: roomId } });
 
@@ -508,6 +523,30 @@ export class RoomService {
       index: safeIndex,
       cardNumber: buildRoomCardNumber(roomId, safeIndex),
       grid,
+    };
+  }
+
+  async getRoomCardCatalog(roomId: number): Promise<RoomCardCatalogDto> {
+    await this.ensureRoomExists(roomId);
+
+    const cards = await this.cardRepository.find({
+      where: { room: { id: roomId } },
+      select: ['cardNumber'],
+      order: { cardNumber: 'ASC' },
+    });
+
+    return {
+      roomId,
+      total: cards.length,
+      cards: cards
+        .map((card) => {
+          const index = parseRoomCardIndex(card.cardNumber);
+          return index == null ? null : { index, cardNumber: card.cardNumber };
+        })
+        .filter(
+          (card): card is { index: number; cardNumber: string } =>
+            card !== null,
+        ),
     };
   }
 

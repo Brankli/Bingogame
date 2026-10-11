@@ -46,9 +46,8 @@ export function buildTypeOrmConfig(
     }
 
     return {
-      type: 'sqljs',
-      location: dbPath,
-      autoSave: true,
+      type: 'better-sqlite3',
+      database: dbPath,
       entities: ENTITIES,
       synchronize,
     };
@@ -76,38 +75,56 @@ export function buildTypeOrmConfig(
   //     },
   //   };
   // }
-// Production (Render)
-if (process.env.NODE_ENV === 'production') {
-  return {
-    type: 'postgres',
-    url: configService.get<string>('DATABASE_URL'),
-    entities: ENTITIES,
+  // Production (Render)
+  if (process.env.NODE_ENV === 'production') {
+    return {
+      type: 'postgres',
+      url: configService.get<string>('DATABASE_URL'),
+      entities: ENTITIES,
 
-    // IMPORTANT
-    synchronize: true,
+      // IMPORTANT
+      synchronize: true,
 
-    ssl: {
-      rejectUnauthorized: false,
-    },
-  };
-}
+      ssl: {
+        rejectUnauthorized: false,
+      },
+    };
+  }
   /**
    * =========================
-   * LOCAL DEVELOPMENT (MYSQL)
+   * LOCAL DEVELOPMENT
    * =========================
    */
+  const dbType = configService.get<string>('DB_TYPE', 'mysql');
+
+  // SQLite
+  if (dbType === 'sqlite') {
+    const path = require('path');
+    const dbPath = path.join(process.cwd(), 'bingo.db');
+
+    return {
+      type: 'better-sqlite3',
+      database: dbPath,
+      entities: ENTITIES,
+      synchronize,
+    };
+  }
+
+  // MySQL or PostgreSQL
   const host = configService.get<string>('DB_HOST');
   const port = Number(configService.get<string>('DB_PORT'));
   const username = configService.get<string>('DB_USER');
-  const password = configService.get<string>('DB_PASS');
+  const password = configService.get<string>('DB_PASS', ''); // Default to empty string
   const database = configService.get<string>('DB_NAME');
 
-  if (!host || !port || !username || !password || !database) {
-    throw new Error('❌ MySQL configuration is incomplete in .env');
+  if (!host || !port || !username || !database) {
+    throw new Error(
+      `❌ ${dbType} configuration is incomplete in .env (missing host, port, username, or database name)`,
+    );
   }
 
   return {
-    type: 'mysql',
+    type: dbType as 'mysql' | 'postgres',
     host,
     port,
     username,
@@ -115,5 +132,8 @@ if (process.env.NODE_ENV === 'production') {
     database,
     entities: ENTITIES,
     synchronize,
+    ...(dbType === 'mysql' && {
+      driver: require('mysql2'),
+    }),
   };
 }

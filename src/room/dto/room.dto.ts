@@ -17,6 +17,7 @@ export class RoomDto {
   cardMode: RoomCardMode;
   createdAt: Date;
   ticketPrice: number;
+  cardDisplayLimit: number;
   currentMatch: MatchDto;
   roomPrize: RoomPrizeDto;
   currentUsers: UserDto[];
@@ -41,6 +42,7 @@ export function mapToRoomDto(room: Room): RoomDto {
     cardMode: room.cardMode || RoomCardMode.AUTOMATIC,
     createdAt: room.createdAt,
     ticketPrice: room.ticketPrice,
+    cardDisplayLimit: room.cardDisplayLimit || 400,
     currentMatch: room.currentMatch ? mapToMatchDto(room.currentMatch) : null,
     roomPrize: mapToRoomPrizeDto(room.roomPrize),
     currentUsers: room.currentUsers?.map(mapToUserDto) || [],

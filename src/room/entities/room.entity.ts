@@ -73,6 +73,9 @@ export class Room {
   @Column({ default: 0.5, type: 'float', scale: 2 })
   ticketPrice!: number;
 
+  @Column({ type: 'int', default: 400 })
+  cardDisplayLimit!: number;
+
   @OneToOne(() => RoomPrize, {
     cascade: true,
     onDelete: 'CASCADE',

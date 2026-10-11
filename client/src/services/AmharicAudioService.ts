@@ -19,8 +19,6 @@ export class AmharicAudioService {
   private preloadCommonSounds() {
     const commonSounds = [
       'events/game-start',
-      'events/bingo-called',
-      'events/winner-valid',
       'events/winner-invalid',
       'events/game-paused',
       'events/game-resumed',
@@ -48,13 +46,13 @@ export class AmharicAudioService {
     const isElectron = navigator.userAgent.toLowerCase().includes('electron');
     const baseUrl = isElectron ? 'http://localhost:3000' : '';
     const fullPath = `${baseUrl}/audio/amharic/${path}.mp3`;
-    
+
     console.log(`[AmharicAudio] Creating new Audio element for: ${fullPath}`);
-    
+
     const audio = new Audio(fullPath);
     audio.preload = 'auto';
     audio.volume = this.volume;
-    
+
     // Handle loading errors gracefully
     audio.addEventListener('error', (e) => {
       const target = e.target as HTMLAudioElement;
@@ -68,7 +66,7 @@ export class AmharicAudioService {
         readyState: target.readyState
       });
     });
-    
+
     audio.addEventListener('loadeddata', () => {
       console.log(`[AmharicAudio] ✅ Audio loaded successfully: ${path}`);
     });
@@ -94,11 +92,11 @@ export class AmharicAudioService {
 
       const path = `numbers/${letter.toLowerCase()}-${number}`;
       console.log(`[AmharicAudio] Loading audio file: /audio/amharic/${path}.mp3`);
-      
+
       const audio = this.loadAudio(path);
-      
+
       this.currentAudio = audio;
-      
+
       // Wait for audio to be ready
       if (audio.readyState < 2) {
         console.log(`[AmharicAudio] Waiting for audio to load: ${path}`);
@@ -108,7 +106,7 @@ export class AmharicAudioService {
           setTimeout(() => reject(new Error('Audio load timeout')), 10000); // Increased to 10 seconds
         });
       }
-      
+
       console.log(`[AmharicAudio] Playing audio: ${path}`);
       await audio.play();
       console.log(`[AmharicAudio] ✅ Successfully playing: ${path}`);
@@ -120,7 +118,7 @@ export class AmharicAudioService {
 
   /**
    * Play a game event announcement
-   * @param eventName - The event name (e.g., 'game-start', 'bingo-called')
+  * @param eventName - The event name (e.g., 'game-start', 'game-paused')
    */
   async playEvent(eventName: string): Promise<void> {
     if (!this.enabled) {
@@ -134,11 +132,11 @@ export class AmharicAudioService {
 
       const path = `events/${eventName}`;
       console.log(`[AmharicAudio] Loading event audio file: /audio/amharic/${path}.mp3`);
-      
+
       const audio = this.loadAudio(path);
-      
+
       this.currentAudio = audio;
-      
+
       // Wait for audio to be ready
       if (audio.readyState < 2) {
         console.log(`[AmharicAudio] Waiting for event audio to load: ${path}`);
@@ -148,12 +146,37 @@ export class AmharicAudioService {
           setTimeout(() => reject(new Error('Audio load timeout')), 10000); // Increased to 10 seconds
         });
       }
-      
+
       console.log(`[AmharicAudio] Playing event audio: ${path}`);
       await audio.play();
       console.log(`[AmharicAudio] ✅ Successfully playing event: ${path}`);
     } catch (error) {
       console.error(`[AmharicAudio] ❌ Error playing Amharic event audio: ${eventName}`, error);
+      throw error;
+    }
+  }
+
+  /** Play the prerecorded shuffle announcement. */
+  async playShuffle(): Promise<void> {
+    if (!this.enabled) return;
+
+    try {
+      this.stopCurrent();
+
+      const audio = this.loadAudio('shuffle');
+      this.currentAudio = audio;
+
+      if (audio.readyState < 2) {
+        await new Promise((resolve, reject) => {
+          audio.addEventListener('canplay', resolve, { once: true });
+          audio.addEventListener('error', reject, { once: true });
+          setTimeout(() => reject(new Error('Audio load timeout')), 10000);
+        });
+      }
+
+      await audio.play();
+    } catch (error) {
+      console.error('[AmharicAudio] Error playing shuffle audio', error);
       throw error;
     }
   }
@@ -171,51 +194,11 @@ export class AmharicAudioService {
 
       const path = `patterns/${patternName}`;
       const audio = this.loadAudio(path);
-      
+
       this.currentAudio = audio;
       await audio.play();
     } catch (error) {
       console.warn(`Error playing Amharic pattern audio: ${patternName}`, error);
-    }
-  }
-
-  /**
-   * Play a toast message audio
-   * @param toastName - The toast audio name (e.g., 'winner-late', 'card-registered')
-   */
-  async playToast(toastName: string): Promise<void> {
-    if (!this.enabled) {
-      console.log(`[AmharicAudio] Audio disabled, skipping toast: ${toastName}`);
-      return;
-    }
-
-    try {
-      // Stop any currently playing audio
-      this.stopCurrent();
-
-      const path = `toasts/${toastName}`;
-      console.log(`[AmharicAudio] Loading toast audio file: /audio/amharic/${path}.mp3`);
-      
-      const audio = this.loadAudio(path);
-      
-      this.currentAudio = audio;
-      
-      // Wait for audio to be ready
-      if (audio.readyState < 2) {
-        console.log(`[AmharicAudio] Waiting for toast audio to load: ${path}`);
-        await new Promise((resolve, reject) => {
-          audio.addEventListener('canplay', resolve, { once: true });
-          audio.addEventListener('error', reject, { once: true });
-          setTimeout(() => reject(new Error('Audio load timeout')), 10000);
-        });
-      }
-      
-      console.log(`[AmharicAudio] Playing toast audio: ${path}`);
-      await audio.play();
-      console.log(`[AmharicAudio] ✅ Successfully playing toast: ${path}`);
-    } catch (error) {
-      console.error(`[AmharicAudio] ❌ Error playing Amharic toast audio: ${toastName}`, error);
-      throw error;
     }
   }
 
@@ -235,7 +218,7 @@ export class AmharicAudioService {
    */
   setVolume(volume: number): void {
     this.volume = Math.max(0, Math.min(1, volume));
-    
+
     // Update volume for all cached audio
     this.audioCache.forEach(audio => {
       audio.volume = this.volume;
@@ -252,7 +235,7 @@ export class AmharicAudioService {
    */
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
-    
+
     if (!enabled) {
       this.stopCurrent();
     }

@@ -89,7 +89,8 @@ export class UserController {
   @Post('adjust-earnings')
   async adjustEarnings(
     @UserDecorator() admin,
-    @Body() body: { userId: number; amount: number; type: string; reason?: string },
+    @Body()
+    body: { userId: number; amount: number; type: string; reason?: string },
   ) {
     const result = await this.userService.adjustEarnings(
       body.userId,

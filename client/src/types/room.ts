@@ -24,6 +24,7 @@ export interface Room {
   cardMode?: RoomCardMode;
   owner?: User;
   ticketPrice?: number;
+  cardDisplayLimit?: number;
   managers?: RoomManager[];
   roomPrize?: RoomPrize;
   currentMatch?: Match | null;

@@ -311,7 +311,45 @@ export class CardService {
    * Pattern definitions as coordinate arrays
    */
   private getPatternCoordinates(pattern: string): number[][][] {
+    const lines: number[][][] = [
+      ...Array.from({ length: 5 }, (_, row) =>
+        Array.from({ length: 5 }, (_, col) => [row, col]),
+      ),
+      ...Array.from({ length: 5 }, (_, col) =>
+        Array.from({ length: 5 }, (_, row) => [row, col]),
+      ),
+      [
+        [0, 0],
+        [1, 1],
+        [2, 2],
+        [3, 3],
+        [4, 4],
+      ],
+      [
+        [0, 4],
+        [1, 3],
+        [2, 2],
+        [3, 1],
+        [4, 0],
+      ],
+    ];
+    const combineLines = (count: number): number[][][] => {
+      const combinations: number[][][] = [];
+      const visit = (start: number, selected: number[][][]) => {
+        if (selected.length === count) {
+          combinations.push(selected.flat());
+          return;
+        }
+        for (let index = start; index < lines.length; index++) {
+          visit(index + 1, [...selected, lines[index]]);
+        }
+      };
+      visit(0, []);
+      return combinations;
+    };
     const patterns: { [key: string]: number[][][] } = {
+      twoline: combineLines(2),
+      threeline: combineLines(3),
       horizontal: [
         [
           [0, 0],
@@ -547,7 +585,9 @@ export class CardService {
     return patterns[normalizeVerifyPattern(pattern)] || [];
   }
 
-  private async resolveCardForVerify(rawCardNumber: string): Promise<Card | null> {
+  private async resolveCardForVerify(
+    rawCardNumber: string,
+  ): Promise<Card | null> {
     const trimmed = String(rawCardNumber || '').trim();
     if (!trimmed) {
       return null;
@@ -576,11 +616,19 @@ export class CardService {
     }
 
     const registeredSet = new Set(
-      registeredCards.map((c) => String(c || '').trim().toUpperCase()),
+      registeredCards.map((c) =>
+        String(c || '')
+          .trim()
+          .toUpperCase(),
+      ),
     );
 
     const candidates = new Set<string>();
-    candidates.add(String(card.cardNumber || '').trim().toUpperCase());
+    candidates.add(
+      String(card.cardNumber || '')
+        .trim()
+        .toUpperCase(),
+    );
 
     const normalized = normalizeRoomCardNumber(inputCardNumber, card.room.id);
     if (normalized) {
@@ -803,6 +851,10 @@ export class CardService {
         if (index < 5) return `Horizontal Row ${index + 1}`;
         if (index < 10) return `Vertical Column ${index - 4}`;
         return index === 10 ? 'Diagonal (\\)' : 'Diagonal (/)';
+      case 'twoline':
+        return `Two Lines (Combination ${index + 1})`;
+      case 'threeline':
+        return `Three Lines (Combination ${index + 1})`;
       case 'corners':
         return 'Four Corners';
       case 'x':

@@ -28,6 +28,17 @@ export interface RoomCardPreview {
   grid: number[][];
 }
 
+export interface RoomCardCatalogItem {
+  index: number;
+  cardNumber: string;
+}
+
+export interface RoomCardCatalog {
+  roomId: number;
+  total: number;
+  cards: RoomCardCatalogItem[];
+}
+
 export interface RoomCreateResponse {
   id: number;
   name: string;

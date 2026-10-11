@@ -37,10 +37,10 @@ export class User {
   totalEarnings!: number;
 
   @Column({ type: 'timestamp', nullable: true })
-createdAt!: Date;
+  createdAt!: Date;
 
-@Column({ type: 'timestamp', nullable: true })
-lastActive!: Date;
+  @Column({ type: 'timestamp', nullable: true })
+  lastActive!: Date;
 
   @BeforeInsert()
   setDates() {

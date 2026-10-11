@@ -43,9 +43,7 @@ export function buildMarkedCells(
   calledNumbers: number[],
 ): boolean[][] {
   const calledSet = new Set(calledNumbers);
-  return grid.map((row) =>
-    row.map((num) => num === 0 || calledSet.has(num)),
-  );
+  return grid.map((row) => row.map((num) => num === 0 || calledSet.has(num)));
 }
 
 export function countMarkedNonFreeCells(
@@ -109,7 +107,9 @@ export function evaluatePatternWins(
     const completedOnLastCall =
       lastCalledNumber === null
         ? false
-        : patternCoords.some(([row, col]) => grid[row][col] === lastCalledNumber);
+        : patternCoords.some(
+            ([row, col]) => grid[row][col] === lastCalledNumber,
+          );
 
     if (completedOnLastCall) {
       validNow.push(patternCoords);

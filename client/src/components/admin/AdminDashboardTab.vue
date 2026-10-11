@@ -1,12 +1,17 @@
 <template>
-<div class="page-header mb-6">
+  <div class="dashboard-page">
+    <div class="page-header mb-6">
               <div>
+                <div class="page-kicker mb-2">Admin overview</div>
                 <h1 class="text-h4 font-weight-bold mb-1">Dashboard</h1>
                 <p class="text-body-2 text-grey">Welcome back, {{ user?.username }}! Here's what's happening today.</p>
               </div>
-              <div class="text-right">
-                <div class="text-caption text-grey">{{ currentDate }}</div>
-                <div class="text-h6 font-weight-bold">{{ currentTime }}</div>
+              <div class="dashboard-date">
+                <v-icon size="18" color="primary">mdi-calendar-blank-outline</v-icon>
+                <div>
+                  <div class="text-caption text-grey">{{ currentDate }}</div>
+                  <div class="text-subtitle-1 font-weight-bold">{{ currentTime }}</div>
+                </div>
               </div>
             </div>
 
@@ -126,6 +131,7 @@
                 </v-card>
               </v-col>
             </v-row>
+  </div>
 </template>
 
 
@@ -135,7 +141,6 @@ import { useAdminDashboard } from '@/composables/useAdminDashboard';
 const {
   activeTab,
   adminCount,
-  cards,
   currentDate,
   currentTime,
   formatFee,
@@ -146,3 +151,32 @@ const {
   user
 } = useAdminDashboard();
 </script>
+
+<style scoped>
+.dashboard-page {
+  min-width: 0;
+}
+
+.dashboard-date {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid #dfe7f0;
+  border-radius: 12px;
+  background: #fff;
+  white-space: nowrap;
+}
+
+.dashboard-date .text-subtitle-1 {
+  color: #26364a;
+  line-height: 1.1;
+}
+
+@media (max-width: 600px) {
+  .dashboard-date {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+</style>
