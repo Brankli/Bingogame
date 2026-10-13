@@ -26,7 +26,8 @@ export function buildTypeOrmConfig(
   isElectron: boolean,
 ): TypeOrmModuleOptions {
   const isProduction = process.env.NODE_ENV === 'production';
-  const synchronize = !isProduction;
+  // const synchronize = !isProduction;
+  const synchronize = isElectron || !isProduction;
 
   /**
    * =========================

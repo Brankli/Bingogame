@@ -19,16 +19,36 @@ const isElectron =
   process.env.ELECTRON_MODE === 'true' ||
   process.versions.hasOwnProperty('electron');
 
+// const getStaticFilesPath = () => {
+//   if (isElectron) {
+//     const path = require('path');
+//     const resourcesPath =
+//       (process as any).resourcesPath || path.join(__dirname, '..', '..');
+
+//     return path.join(resourcesPath, 'app.asar.unpacked', 'client', 'dist');
+//   }
+
+//   return join(__dirname, '..', 'client/dist');
+// };
+
 const getStaticFilesPath = () => {
   if (isElectron) {
     const path = require('path');
-    const resourcesPath =
-      (process as any).resourcesPath || path.join(__dirname, '..', '..');
 
-    return path.join(resourcesPath, 'app.asar.unpacked', 'client', 'dist');
+    if (process.resourcesPath) {
+      return path.join(
+        process.resourcesPath,
+        'app.asar.unpacked',
+        'client',
+        'dist',
+      );
+    }
+
+    // Fallback for local development
+    return path.join(__dirname, '..', '..', 'client', 'dist');
   }
 
-  return join(__dirname, '..', 'client/dist');
+  return join(__dirname, '..', 'client', 'dist');
 };
 
 @Module({

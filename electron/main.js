@@ -38,7 +38,7 @@ function startBackend() {
         env: {
           ...process.env,
           ELECTRON_MODE: 'true',
-          NODE_ENV: 'development',
+          NODE_ENV: 'production',
           PORT: '3000',
           CORS_ORIGIN: 'http://127.0.0.1:3000',
           SECRET_KEY:
