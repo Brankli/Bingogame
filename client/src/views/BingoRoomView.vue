@@ -33,9 +33,9 @@
               <button v-bind="props" class="terminal-user-menu-btn" type="button"
                 aria-label="User and house fee settings" title="User and house fee settings">
                 <v-avatar color="primary" size="24" class="mx-1">
-                  <span class="text-caption text-white">{{ user?.username?.charAt(0).toUpperCase() || 'A' }}</span>
+                  <span class="text-caption text-white">{{ user?.username?.charAt(0).toUpperCase() || '?' }}</span>
                 </v-avatar>
-                <span class="terminal-user-name">{{ user?.username || 'admin' }}</span>
+                <span class="terminal-user-name">{{ user?.username || 'Loading...' }}</span>
               </button>
             </template>
             <v-card class="terminal-menu-card terminal-fee-menu-card">
@@ -49,9 +49,9 @@
           </v-menu>
           <template v-else>
             <v-avatar color="primary" size="24" class="mx-1">
-              <span class="text-caption text-white">{{ user?.username?.charAt(0).toUpperCase() || 'A' }}</span>
+              <span class="text-caption text-white">{{ user?.username?.charAt(0).toUpperCase() || '?' }}</span>
             </v-avatar>
-            <span class="terminal-user-name">{{ user?.username || 'admin' }}</span>
+            <span class="terminal-user-name">{{ user?.username || 'Loading...' }}</span>
           </template>
           <button class="terminal-icon-btn" type="button" aria-label="Logout" title="Logout" @click="confirmLogout">
             <v-icon size="small">mdi-logout</v-icon>
@@ -159,9 +159,9 @@
         </span>
       </div>
 
-      <div class="registered-cards-summary" aria-live="polite">
+      <!-- <div class="registered-cards-summary" aria-live="polite">
         {{ registeredCards.length }} card{{ registeredCards.length === 1 ? '' : 's' }} registered
-      </div>
+      </div> -->
 
       <button type="button" class="terminal-start-btn" :disabled="registeredCards.length === 0" @click="startNewGame">
         Start Game
@@ -327,18 +327,6 @@
         <!-- Card Details Modal -->
         <v-dialog v-model="showCardDetailsModal" max-width="500">
           <v-card class="card-details-card">
-            <v-card-title class="card-details-title">
-              <v-icon class="mr-2">mdi-card-account-details</v-icon>
-              Card #{{ selectedCardForView }}
-              <v-spacer></v-spacer>
-              <v-btn icon size="small" variant="text" @click="
-                showCardDetailsModal = false;
-              selectedCardForView = null;
-              selectedCardGrid = null;
-              ">
-                <v-icon>mdi-close</v-icon>
-              </v-btn>
-            </v-card-title>
             <v-card-text class="pa-4">
               <div class="card-detail-display">
                 <div class="bingo-card-header">
@@ -353,6 +341,7 @@
                     <tr v-for="row in 5" :key="row">
                       <td v-for="col in 5" :key="col" class="detail-card-cell" :class="{
                         'free-space': row === 3 && col === 3,
+                        'called-marked': isCardCellCalled(row - 1, col - 1),
                         'winning-marked': isWinningPatternCell(row - 1, col - 1),
                       }">
                         <span v-if="row === 3 && col === 3">FREE</span>
@@ -362,12 +351,19 @@
                   </tbody>
                 </table>
                 <div class="card-detail-info mt-3">
-                  <v-chip color="indigo" variant="elevated">
+                  <strong class="card-detail-number">
                     Card #{{ selectedCardForView }}
-                  </v-chip>
-                  <v-chip :color="isCardRegistered(selectedCardForView || 0) ? 'success' : 'grey'" variant="elevated">
-                    {{ isCardRegistered(selectedCardForView || 0) ? 'Registered' : 'Not Registered' }}
-                  </v-chip>
+                  </strong>
+                  <div class="card-detail-close-box">
+                    <v-btn class="card-detail-close" icon size="small" variant="text" aria-label="Close card details"
+                      @click="
+                        showCardDetailsModal = false;
+                      selectedCardForView = null;
+                      selectedCardGrid = null;
+                      ">
+                      <v-icon>mdi-close</v-icon>
+                    </v-btn>
+                  </div>
                 </div>
               </div>
             </v-card-text>
@@ -770,6 +766,10 @@ const getCardCellValue = (row: number, col: number): string | number => {
   }
   return selectedCardGrid.value[row][col] ?? '-';
 };
+const isCardCellCalled = (row: number, col: number): boolean => {
+  const value = selectedCardGrid.value?.[row]?.[col];
+  return typeof value === 'number' && value > 0 && isNumberCalled(value);
+};
 const getWinningCardCellValue = (row: number, col: number): string | number => {
   if (!selectedCardGrid.value || !selectedCardGrid.value[row]) {
     return row === 2 && col === 2 ? 'FREE' : '';
@@ -793,6 +793,7 @@ const speakMessage = async (message: string) => {
     // Use Amharic audio for specific messages
     const eventMap: Record<string, string> = {
       'Congratulations': 'congratulations',
+      'Card not registered': 'card-not-registered',
       'Invalid claim': 'card-locked',
       'Late claim rejected': 'winner-invalid',
       'must call BINGO immediately': 'winner-invalid',
@@ -888,8 +889,6 @@ const announceNumber = async (letter: string, number: number) => {
 
 const handleLanguageChange = (lang: string) => {
   currentLanguage.value = lang;
-  const message = lang === 'am' ? 'Language changed to Amharic' : 'Language changed to English';
-  showToast(message, 'info');
 };
 
 const handleVolumeChange = (volume: number) => {
@@ -1118,12 +1117,12 @@ const logout = () => {
 
 const startNewGame = async () => {
   if (!canManageRoom.value) {
-    showToast('Only admin or assigned room manager can start a game.', 'warning');
+    speakMessage('Only admin or assigned room manager can start a game.');
     return;
   }
   if (registeredCards.value.length === 0) {
     const message = 'Please register at least one card before starting the game.';
-    showToast(message, 'warning');
+    speakMessage(message);
     return;
   }
 
@@ -1143,7 +1142,6 @@ const startNewGame = async () => {
   // Announce game start and pattern
   const patternTitle = getPatternTitle(currentPattern.value);
   const startMessage = `Starting new game! We are playing for ${patternTitle}. Good luck everyone!`;
-  showToast(startMessage, 'success');
   speakMessage(startMessage);
 
   // Convert card numbers to proper format (e.g., 1 -> ROOM9-CAR0001)
@@ -1173,14 +1171,13 @@ const startNewGame = async () => {
     }, (response?: { error?: string }) => {
       if (response?.error) {
         console.error('[Frontend] ❌ Server error:', response.error);
-        showToast(`Error starting game: ${response.error}`, 'error');
+        speakMessage(`Error starting game: ${response.error}`);
       } else {
         console.log('[Frontend] ✅ Server acknowledged new-match event');
       }
     });
     gameStatus.value = 'playing';
     matchWinners.value = [];
-    showToast(`Game started with ${registeredCards.value.length} registered cards!`, 'success');
     if (initialCallTimeout !== null) {
       window.clearTimeout(initialCallTimeout);
     }
@@ -1196,10 +1193,9 @@ const startNewGame = async () => {
     socketStore.ensureConnected();
     if (!socketStore.client) {
       console.error('[Frontend] ❌ Socket not connected!');
-      showToast('Connection error. Please log in again.', 'error');
+      speakMessage('Connection error. Please log in again.');
       return;
     }
-    showToast('Connecting to server...', 'info');
     socketStore.client.once('connect', emitNewMatch);
     return;
   }
@@ -1229,13 +1225,14 @@ const pauseGame = () => {
   console.log('[PAUSE] Socket connected:', socketStore.client?.connected);
   console.log('[PAUSE] Emitting pause-match event...');
 
+  stopAutoCall();
+  gameStatus.value = 'paused';
+  console.log('[PAUSE] ✅ Game status set to paused');
+
   socketStore.client?.emit('pause-match', {
     matchId: room.value?.currentMatch?.id,
     roomId: roomId.value
   });
-
-  gameStatus.value = 'paused';
-  console.log('[PAUSE] ✅ Game status set to paused');
 
   // Announce pause
   speakMessage('Game paused. BINGO called!');
@@ -1489,19 +1486,12 @@ const verifyWin = async () => {
       showToast(moreWinnersMessage, 'info');
     } else if (response?.data.unregistered) {
       // Card is not registered for this match - BLOCK verification
-      const unregisteredMessage = `❌ UNREGISTERED CARD! ${response?.data.message || 'This card was not registered for this game.'}`;
-      showToast(unregisteredMessage, 'error');
       speakMessage(`Card not registered. Only registered cards can win.`);
-
-      // Do NOT lock the card, just reject the verification
-      showToast('Click RESUME to continue calling numbers.', 'info');
     } else if (response?.data.cardLocked) {
       // Card is locked from previous wrong claim
       const lockedMessage = `Card ${normalizedCardNumber} is locked due to a previous wrong claim.`;
       showToast(lockedMessage, 'error');
       speakMessage(`Invalid claim. ${normalizedCardNumber} is locked.`);
-
-      showToast('Click RESUME to continue calling numbers.', 'info');
     } else {
       // Invalid claim - check if it's a timing issue (late claim)
       const isLateClaim = response?.data.lateClaim ||
@@ -2669,19 +2659,6 @@ onBeforeUnmount(() => {
   }
 }
 
-.card-details-title {
-  min-height: 58px;
-  background: linear-gradient(135deg, #8524b5 0%, #6f1b9d 100%) !important;
-  color: #ffffff !important;
-  font-weight: 800;
-  letter-spacing: 0.01em;
-
-  :deep(.v-icon),
-  :deep(.v-btn) {
-    color: #ffffff !important;
-  }
-}
-
 .card-detail-display {
   max-width: 380px;
   margin: 0 auto;
@@ -2702,9 +2679,9 @@ onBeforeUnmount(() => {
     text-align: center;
     font-size: 1rem;
     font-weight: bold;
-    background: linear-gradient(135deg, #8524b5 0%, #6f1b9d 100%);
-    color: #ffffff;
-    border: 1px solid #5b147f;
+    background: #ffffff;
+    color: #111827;
+    border: 1px solid #c9ced6;
     border-radius: 7px;
     transition: all 0.3s;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
@@ -2722,19 +2699,48 @@ onBeforeUnmount(() => {
       border-color: #fbc02d;
     }
 
+    &.called-marked {
+      background: #ef4444;
+      color: #ffffff;
+      border-color: #b91c1c;
+      box-shadow: 0 0 0 1px #ffffff, 0 3px 8px rgba(185, 28, 28, 0.35);
+    }
+
     &.winning-marked {
-      background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
-      border-color: #2e7d32;
-      box-shadow: 0 0 12px rgba(76, 175, 80, 0.8);
+      background: #22c55e;
+      color: #ffffff;
+      border-color: #15803d;
+      box-shadow: 0 0 0 1px #ffffff, 0 0 12px rgba(34, 197, 94, 0.55);
     }
   }
 }
 
+.card-detail-close {
+  margin: 0;
+  color: #ffffff;
+}
+
+.card-detail-close-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  background: #d32f2f;
+}
+
 .card-detail-info {
   display: flex;
+  align-items: center;
   justify-content: center;
   gap: 12px;
   color: #111827;
+}
+
+.card-detail-number {
+  font-size: 1.35rem;
+  font-weight: 800;
 }
 
 .inline-fee-field {
@@ -4072,8 +4078,8 @@ onBeforeUnmount(() => {
 .terminal-start-btn:focus-visible,
 .bet-btn:focus-visible,
 .terminal-icon-btn:focus-visible {
-  outline: 3px solid #1f73be;
-  outline-offset: 2px;
+  outline: 2px solid #1f73be;
+  outline-offset: 1px;
 }
 
 .terminal-card-tile.tile-selected {

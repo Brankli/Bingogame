@@ -10,34 +10,19 @@
 
       <!-- User Info -->
       <div v-if="token && user" class="user-section">
-        <v-chip
-          :color="isAdmin ? 'error' : 'primary'"
-          variant="elevated"
-          class="mr-2"
-        >
+        <v-chip :color="isAdmin ? 'error' : 'primary'" variant="elevated" class="mr-2">
           <v-icon start>
             {{ isAdmin ? 'mdi-shield-crown' : 'mdi-account-circle' }}
           </v-icon>
 
           {{ user?.username }}
 
-          <v-chip
-            v-if="isAdmin"
-            size="x-small"
-            color="white"
-            class="ml-2"
-          >
+          <v-chip v-if="isAdmin" size="x-small" color="white" class="ml-2">
             ADMIN
           </v-chip>
         </v-chip>
 
-        <v-btn
-          v-if="isAdmin"
-          color="success"
-          variant="elevated"
-          class="mr-2"
-          @click="goToAdminDashboard"
-        >
+        <v-btn v-if="isAdmin" color="success" variant="elevated" class="mr-2" @click="goToAdminDashboard">
           <v-icon class="mr-1">mdi-view-dashboard</v-icon>
           Admin Dashboard
         </v-btn>
@@ -52,12 +37,7 @@
       <div v-else class="auth-buttons">
         <v-dialog v-model="loginDialog" max-width="500">
           <template #activator="{ props }">
-            <v-btn
-              color="primary"
-              variant="elevated"
-              v-bind="props"
-              class="mr-2"
-            >
+            <v-btn color="primary" variant="elevated" v-bind="props" class="mr-2">
               <v-icon class="mr-1">mdi-login</v-icon>
               Login
             </v-btn>
@@ -71,66 +51,30 @@
 
             <v-card-text class="pa-6">
               <v-form ref="loginForm" @submit.prevent="login">
-                <v-text-field
-                  v-model="username"
-                  label="Username"
-                  variant="outlined"
-                  prepend-inner-icon="mdi-account"
-                  :rules="usernameRules"
-                  required
-                  class="mb-4"
-                />
+                <v-text-field v-model="username" label="Username" variant="outlined" prepend-inner-icon="mdi-account"
+                  :rules="usernameRules" required class="mb-4" />
 
-                <v-text-field
-                  v-model="password"
-                  type="password"
-                  label="Password"
-                  variant="outlined"
-                  prepend-inner-icon="mdi-lock"
-                  :rules="passwordRules"
-                  required
-                  class="mb-4"
-                />
+                <v-text-field v-model="password" type="password" label="Password" variant="outlined"
+                  prepend-inner-icon="mdi-lock" :rules="passwordRules" required class="mb-4" />
 
-                <v-alert
-                  v-if="loginError"
-                  type="error"
-                  density="compact"
-                  class="mb-4"
-                >
+                <v-alert v-if="loginError" type="error" density="compact" class="mb-4">
                   <v-icon class="mr-2">mdi-alert-circle</v-icon>
                   {{ loginError }}
                 </v-alert>
 
-                <v-alert
-                  v-else
-                  type="info"
-                  density="compact"
-                  class="mb-4"
-                >
+                <v-alert v-else type="info" density="compact" class="mb-4">
                   <strong>Note:</strong>
                   Contact an administrator to create an account.
                 </v-alert>
 
-                <v-btn
-                  type="submit"
-                  color="primary"
-                  size="large"
-                  block
-                  :loading="loggingIn"
-                >
+                <v-btn type="submit" color="primary" size="large" block :loading="loggingIn">
                   Login
                 </v-btn>
               </v-form>
             </v-card-text>
 
             <v-card-actions>
-              <v-btn
-                color="grey"
-                variant="text"
-                block
-                @click="closeLoginDialog"
-              >
+              <v-btn color="grey" variant="text" block @click="closeLoginDialog">
                 Close
               </v-btn>
             </v-card-actions>
@@ -256,8 +200,9 @@ async function login() {
     localStorage.setItem('token', token.value);
     console.log('✅ Token saved to localStorage');
 
-    // Set user in auth store
-    auth.setUser(loginResponse.data.user)
+    // Resolve the authenticated identity from the server after saving the token.
+    const { data: authenticatedUser } = await services.authService.me();
+    auth.setUser(authenticatedUser);
 
     const { getApiUrl } = await import('@/utils/apiUrl')
     socket.connect(getApiUrl(), token.value)
@@ -270,8 +215,8 @@ async function login() {
     loginDialog.value = false
 
     // Navigate based on user role (without reload to prevent logout)
-    const userRole = loginResponse.data.user?.role?.toLowerCase();
-    
+    const userRole = authenticatedUser.role?.toLowerCase();
+
     if (userRole === 'admin') {
       // Admin goes to admin dashboard
       await router.push({ name: 'admin-dashboard' });
@@ -303,13 +248,13 @@ function goToAdminDashboard() {
 async function logout() {
   // Clear token from localStorage
   localStorage.removeItem('token');
-  
+
   // Clear user from auth store (this also clears localStorage)
   auth.logout();
   socket.disconnect();
 
   token.value = '';
-  
+
   // Redirect to home
   router.push({ name: 'home' });
 }
@@ -332,8 +277,8 @@ if (storedToken) {
       })
       .catch(err => {
         console.error('Failed to restore session:', err);
-        // Clear invalid token
-        localStorage.removeItem('token');
+        // Clear invalid session data
+        auth.logout();
         token.value = '';
       });
   }
@@ -342,11 +287,9 @@ if (storedToken) {
 
 <style scoped lang="scss">
 .app-header {
-  background: linear-gradient(
-    135deg,
-    #667eea 0%,
-    #764ba2 100%
-  ) !important;
+  background: linear-gradient(135deg,
+      #667eea 0%,
+      #764ba2 100%) !important;
 
   .app-title {
     display: flex;
@@ -377,11 +320,9 @@ if (storedToken) {
   border-radius: 12px !important;
 
   .auth-card-title {
-    background: linear-gradient(
-      135deg,
-      #667eea 0%,
-      #764ba2 100%
-    );
+    background: linear-gradient(135deg,
+        #667eea 0%,
+        #764ba2 100%);
 
     color: white;
     font-size: 1.3rem;

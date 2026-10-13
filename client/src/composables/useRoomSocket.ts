@@ -50,6 +50,10 @@ export function useRoomSocket(handlers: RoomSocketHandlers) {
   };
 
   const onExtracted = ({ number }: { number: number }) => {
+    if (handlers.gameStatus.value !== 'playing') {
+      return;
+    }
+
     const alreadyCalled = handlers.isNumberCalled
       ? handlers.isNumberCalled(number)
       : handlers.calledNumbers.value.includes(number);
@@ -72,7 +76,7 @@ export function useRoomSocket(handlers: RoomSocketHandlers) {
     handlers.lastCalledNumber.value = 0;
     handlers.gameStatus.value = 'playing';
     handlers.matchWinners.value = [];
-    
+
     // Load pattern from the match if available, otherwise use current pattern
     const matchPattern = updatedRoom?.currentMatch?.pattern;
     if (matchPattern) {

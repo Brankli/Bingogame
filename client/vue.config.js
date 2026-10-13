@@ -16,11 +16,11 @@ module.exports = defineConfig({
 
   // Required for Electron file loading
   publicPath: './',
-pwa: {
-  workboxOptions: {
-    skipWaiting: true
-  }
-},
+  pwa: {
+    workboxOptions: {
+      skipWaiting: true
+    }
+  },
   devServer: {
     host: '0.0.0.0',
     port: 8080,

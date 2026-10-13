@@ -49,14 +49,12 @@ router.beforeEach(async (to) => {
   }
 
   const auth = useAuth()
-  if (!auth.user) {
-    try {
-      const { data } = await authService.me()
-      auth.setUser(data)
-    } catch {
-      localStorage.removeItem('token')
-      return { name: 'home' }
-    }
+  try {
+    const { data } = await authService.me()
+    auth.setUser(data)
+  } catch {
+    auth.logout()
+    return { name: 'home' }
   }
 
   if (String(auth.user?.role || '').toLowerCase() !== 'admin') {

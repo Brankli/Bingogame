@@ -3,8 +3,8 @@
     <!-- Top Navigation Bar -->
     <v-app-bar color="white" elevation="1" class="top-bar" height="72">
       <v-app-bar-nav-icon @click="drawer = !drawer" class="menu-icon"></v-app-bar-nav-icon>
-      
-    
+
+
 
       <v-spacer></v-spacer>
 
@@ -45,14 +45,8 @@
     </v-app-bar>
 
     <!-- Sidebar Navigation -->
-    <v-navigation-drawer
-      v-model="drawer"
-      :rail="rail && mdAndUp"
-      :permanent="mdAndUp"
-      :temporary="!mdAndUp"
-      class="modern-sidebar"
-      color="#1a1d2e"
-    >
+    <v-navigation-drawer v-model="drawer" :rail="rail && mdAndUp" :permanent="mdAndUp" :temporary="!mdAndUp"
+      class="modern-sidebar" color="#1a1d2e">
       <div class="sidebar-header">
         <v-icon color="white" size="large">mdi-apps</v-icon>
         <div v-if="!rail" class="ml-3">
@@ -64,57 +58,42 @@
       <v-divider class="my-4" color="rgba(255,255,255,0.1)"></v-divider>
 
       <div class="sidebar-section-title" v-if="!rail">MAIN</div>
-      
+
       <v-list density="compact" nav class="sidebar-menu">
-        <v-list-item
-          :class="{ 'active-menu-item': activeTab === 'dashboard' }"
-          @click="activeTab = 'dashboard'"
-          class="menu-item"
-        >
+        <v-list-item :class="{ 'active-menu-item': activeTab === 'dashboard' }" @click="activeTab = 'dashboard'"
+          class="menu-item">
           <template v-slot:prepend>
             <v-icon>mdi-view-dashboard</v-icon>
           </template>
           <v-list-item-title>Dashboard</v-list-item-title>
         </v-list-item>
 
-        <v-list-item
-          :class="{ 'active-menu-item': activeTab === 'rooms' }"
-          @click="activeTab = 'rooms'"
-          class="menu-item"
-        >
+        <v-list-item :class="{ 'active-menu-item': activeTab === 'rooms' }" @click="activeTab = 'rooms'"
+          class="menu-item">
           <template v-slot:prepend>
             <v-icon>mdi-door-open</v-icon>
           </template>
           <v-list-item-title>Rooms</v-list-item-title>
         </v-list-item>
 
-        <v-list-item
-          :class="{ 'active-menu-item': activeTab === 'users' }"
-          @click="activeTab = 'users'"
-          class="menu-item"
-        >
+        <v-list-item :class="{ 'active-menu-item': activeTab === 'users' }" @click="activeTab = 'users'"
+          class="menu-item">
           <template v-slot:prepend>
             <v-icon>mdi-account-multiple</v-icon>
           </template>
           <v-list-item-title>Users</v-list-item-title>
         </v-list-item>
 
-        <v-list-item
-          :class="{ 'active-menu-item': activeTab === 'register' }"
-          @click="activeTab = 'register'"
-          class="menu-item"
-        >
+        <v-list-item :class="{ 'active-menu-item': activeTab === 'register' }" @click="activeTab = 'register'"
+          class="menu-item">
           <template v-slot:prepend>
             <v-icon>mdi-account-plus</v-icon>
           </template>
           <v-list-item-title>Register User</v-list-item-title>
         </v-list-item>
 
-        <v-list-item
-          :class="{ 'active-menu-item': activeTab === 'cards' }"
-          @click="activeTab = 'cards'"
-          class="menu-item"
-        >
+        <v-list-item :class="{ 'active-menu-item': activeTab === 'cards' }" @click="activeTab = 'cards'"
+          class="menu-item">
           <template v-slot:prepend>
             <v-icon>mdi-cards</v-icon>
           </template>
@@ -124,11 +103,7 @@
 
       <template v-slot:append>
         <div v-if="mdAndUp" class="pa-2">
-          <v-btn
-            icon
-            @click.stop="rail = !rail"
-            class="toggle-btn"
-          >
+          <v-btn icon @click.stop="rail = !rail" class="toggle-btn">
             <v-icon>{{ rail ? 'mdi-chevron-right' : 'mdi-chevron-left' }}</v-icon>
           </v-btn>
         </div>
@@ -143,28 +118,28 @@
           <v-window-item value="dashboard">
             <AdminDashboardTab />
           </v-window-item>
-        <!-- Rooms Tab -->
-        <v-window-item value="rooms">
+          <!-- Rooms Tab -->
+          <v-window-item value="rooms">
             <AdminRoomsTab />
           </v-window-item>
 
-        <!-- Users Tab -->
-        <v-window-item value="users">
+          <!-- Users Tab -->
+          <v-window-item value="users">
             <AdminUsersTab />
           </v-window-item>
 
-        <!-- Register User Tab -->
-        <v-window-item value="register">
+          <!-- Register User Tab -->
+          <v-window-item value="register">
             <AdminRegisterTab />
           </v-window-item>
 
-        <!-- Card Management Tab -->
-        <v-window-item value="cards">
+          <!-- Card Management Tab -->
+          <v-window-item value="cards">
             <AdminCardsTab />
           </v-window-item>
 
-        <!-- Profile Tab -->
-        <v-window-item value="profile">
+          <!-- Profile Tab -->
+          <v-window-item value="profile">
             <AdminProfileTab />
           </v-window-item>
         </v-window>
@@ -217,38 +192,16 @@
     </v-dialog>
 
     <!-- Toast Notification -->
-    <v-snackbar
-      v-model="toast.show"
-      :color="toast.color"
-      :timeout="4000"
-      location="top"
-      variant="elevated"
-      class="admin-toast"
-    >
+    <v-snackbar v-model="toast.show" :color="toast.color" :timeout="4000" location="top" variant="elevated"
+      class="admin-toast">
       <div class="d-flex align-center">
-        <v-icon
-          v-if="toast.color === 'success'"
-          class="mr-2"
-          icon="mdi-check-circle"
-        />
-        <v-icon
-          v-else-if="toast.color === 'error'"
-          class="mr-2"
-          icon="mdi-alert-circle"
-        />
-        <v-icon
-          v-else-if="toast.color === 'warning'"
-          class="mr-2"
-          icon="mdi-alert"
-        />
+        <v-icon v-if="toast.color === 'success'" class="mr-2" icon="mdi-check-circle" />
+        <v-icon v-else-if="toast.color === 'error'" class="mr-2" icon="mdi-alert-circle" />
+        <v-icon v-else-if="toast.color === 'warning'" class="mr-2" icon="mdi-alert" />
         <span>{{ toast.message }}</span>
       </div>
       <template #actions>
-        <v-btn
-          variant="text"
-          icon="mdi-close"
-          @click="toast.show = false"
-        />
+        <v-btn variant="text" icon="mdi-close" @click="toast.show = false" />
       </template>
     </v-snackbar>
   </div>
@@ -296,7 +249,7 @@ const {
   border-bottom: 1px solid #e0e0e0 !important;
   padding: 0 12px;
   z-index: 1005 !important;
-  
+
   .app-title {
     display: flex;
     align-items: center;
@@ -363,22 +316,22 @@ const {
     height: auto;
     padding: 8px 16px;
     border-radius: 8px;
-    
+
     @media (max-width: 600px) {
       min-width: auto;
       padding: 8px;
     }
-    
+
     .user-info {
       text-align: left;
-      
+
       .user-name {
         font-size: 0.875rem;
         font-weight: 600;
         color: #2c3e50;
         line-height: 1.2;
       }
-      
+
       .user-role {
         font-size: 0.75rem;
         color: #8898aa;
@@ -392,21 +345,21 @@ const {
 .modern-sidebar {
   border-right: none !important;
   box-shadow: 10px 0 28px rgba(24, 35, 55, 0.08);
-  
+
   .sidebar-header {
     min-height: 96px;
     padding: 24px 20px;
     display: flex;
     align-items: center;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    
+
     .sidebar-title {
       color: white;
       font-size: 1.1rem;
       font-weight: 600;
       line-height: 1.2;
     }
-    
+
     .sidebar-subtitle {
       color: rgba(255, 255, 255, 0.6);
       font-size: 0.75rem;
@@ -424,27 +377,27 @@ const {
 
   .sidebar-menu {
     padding: 8px;
-    
+
     .menu-item {
       margin-bottom: 4px;
       border-radius: 8px;
       color: rgba(255, 255, 255, 0.8);
       transition: all 0.2s ease;
-      
+
       &:hover {
         background: rgba(255, 255, 255, 0.1);
         color: white;
       }
-      
+
       &.active-menu-item {
         background: linear-gradient(135deg, #4e73df 0%, #224abe 100%);
         color: white;
-        
+
         .v-icon {
           color: white;
         }
       }
-      
+
       .v-icon {
         color: rgba(255, 255, 255, 0.8);
       }
@@ -453,7 +406,7 @@ const {
 
   .toggle-btn {
     color: rgba(255, 255, 255, 0.8);
-    
+
     &:hover {
       background: rgba(255, 255, 255, 0.1);
     }
@@ -465,14 +418,17 @@ const {
   background: #f5f7fa;
   min-width: 0;
   width: 100%;
+  max-width: 100%;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
 }
 
 .admin-content-container {
   width: 100%;
-  max-width: 1600px;
+  max-width: none !important;
   min-width: 0;
-  margin: 0 auto;
-  padding: 28px clamp(12px, 2.4vw, 36px) 40px !important;
+  margin: 0 !important;
+  padding: 28px clamp(16px, 2vw, 32px) 40px !important;
 }
 
 .v-window,
@@ -486,12 +442,12 @@ const {
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 24px;
-  
+
   h1 {
     color: #2c3e50;
     margin-bottom: 4px;
   }
-  
+
   .text-grey {
     color: #8898aa;
   }
@@ -510,24 +466,24 @@ const {
   border-radius: 16px !important;
   overflow: hidden;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
-  
+
   &:hover {
     transform: translateY(-4px);
     box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15) !important;
   }
-  
+
   .v-card-text {
     padding: 24px !important;
     position: relative;
   }
-  
+
   .metric-icon {
     position: absolute;
     top: 20px;
     right: 20px;
     opacity: 0.3;
   }
-  
+
   .metric-value {
     font-size: 2.5rem;
     font-weight: 700;
@@ -535,21 +491,21 @@ const {
     line-height: 1;
     margin: 8px 0;
   }
-  
+
   .metric-label {
     font-size: 0.875rem;
     color: rgba(255, 255, 255, 0.9);
     font-weight: 500;
     margin-bottom: 12px;
   }
-  
+
   .metric-trend {
     display: flex;
     align-items: center;
     gap: 4px;
     font-size: 0.75rem;
     color: rgba(255, 255, 255, 0.8);
-    
+
     .v-icon {
       color: rgba(255, 255, 255, 0.8);
     }
@@ -577,29 +533,29 @@ const {
   border-radius: 16px !important;
   border: 1px solid #e3e8ef;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
-  
+
   .v-card-title {
     padding: 20px 24px;
     border-bottom: 1px solid #e3e8ef;
     background: white;
     color: #2c3e50;
   }
-  
+
   .v-card-text {
     padding: 0;
   }
-  
+
   .v-list {
     background: transparent;
-    
+
     .v-list-item {
       padding: 16px 24px;
       border-bottom: 1px solid #f0f3f7;
-      
+
       &:last-child {
         border-bottom: none;
       }
-      
+
       &:hover {
         background: #f8f9fa;
       }
@@ -610,13 +566,18 @@ const {
 /* Responsive */
 @media (max-width: 960px) {
   .admin-content-container {
+    padding-right: 20px !important;
+    padding-left: 20px !important;
+  }
+
+  .admin-content-container {
     padding-top: 20px !important;
   }
 
   .page-header {
     flex-direction: column;
     gap: 16px;
-    
+
     .text-right {
       text-align: left !important;
     }
@@ -637,6 +598,10 @@ const {
 
     .admin-content-container {
       padding: 16px 12px 28px !important;
+    }
+
+    .modern-sidebar {
+      width: min(280px, 86vw) !important;
     }
 
     .page-header {
@@ -665,11 +630,11 @@ const {
       margin-right: 10px !important;
     }
 
-    .modern-rooms-card > .v-card-text,
-    .modern-action-card > .v-card-text,
-    .modern-card-selector > .v-card-text,
-    .modern-guide-card > .v-card-text,
-    .modern-generation-card > .v-card-text {
+    .modern-rooms-card>.v-card-text,
+    .modern-action-card>.v-card-text,
+    .modern-card-selector>.v-card-text,
+    .modern-guide-card>.v-card-text,
+    .modern-generation-card>.v-card-text {
       padding: 16px !important;
     }
   }
@@ -702,12 +667,12 @@ const {
   transition: all 0.3s ease;
   border: 2px solid #e3e8ef !important;
   border-radius: 12px !important;
-  
+
   &:hover {
     border-color: #4e73df !important;
     transform: translateX(4px);
   }
-  
+
   &.role-card-selected {
     border-color: #4e73df !important;
     background: rgba(78, 115, 223, 0.05);
@@ -742,7 +707,7 @@ const {
   border: 2px solid #e3e8ef;
   background: white;
   transition: all 0.3s ease;
-  
+
   &:hover {
     border-color: #4e73df;
     transform: translateY(-4px);
@@ -756,12 +721,12 @@ const {
     align-items: center;
     gap: 8px;
     margin-bottom: 8px;
-    
+
     &:last-child {
       margin-bottom: 0;
     }
   }
-  
+
   .stat-chip {
     width: 100%;
     justify-content: flex-start;
@@ -771,7 +736,7 @@ const {
 .empty-rooms-state {
   text-align: center;
   padding: 80px 20px;
-  
+
   h4 {
     color: #2c3e50;
   }
@@ -797,7 +762,7 @@ const {
 .compact-stat-card {
   border-radius: 12px !important;
   transition: transform 0.2s ease;
-  
+
   &:hover {
     transform: translateY(-2px);
   }
@@ -806,7 +771,7 @@ const {
 .guide-step {
   padding: 8px 0;
   border-bottom: 1px solid #f0f0f0;
-  
+
   &:last-child {
     border-bottom: none;
   }
@@ -816,7 +781,7 @@ const {
   border-radius: 12px !important;
   border: 2px solid #e3e8ef;
   transition: all 0.3s ease;
-  
+
   &:hover {
     border-color: #4e73df;
     transform: translateY(-2px);
@@ -827,10 +792,10 @@ const {
 .compact-cards-table {
   border-radius: 12px !important;
   overflow: hidden;
-  
+
   thead {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    
+
     tr th {
       color: white !important;
       font-weight: 600 !important;
@@ -839,15 +804,15 @@ const {
       font-size: 0.875rem;
     }
   }
-  
+
   tbody {
     tr {
       transition: background-color 0.2s ease;
-      
+
       &:hover {
         background-color: rgba(102, 126, 234, 0.05) !important;
       }
-      
+
       td {
         padding: 10px 16px !important;
         border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
@@ -859,7 +824,7 @@ const {
 .empty-cards-state {
   text-align: center;
   padding: 40px 20px;
-  
+
   h4 {
     color: #2c3e50;
   }
@@ -1187,7 +1152,7 @@ const {
 
 .empty-state {
   border-radius: 12px !important;
-  
+
   .v-icon {
     opacity: 0.5;
   }

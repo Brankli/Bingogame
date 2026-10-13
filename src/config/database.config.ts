@@ -53,11 +53,7 @@ export function buildTypeOrmConfig(
     };
   }
 
-  /**
-   * =========================
-   * PRODUCTION (RENDER)
-   * =========================
-   */
+  /** Production PostgreSQL configuration. */
   // if (isProduction) {
   //   const dbUrl = configService.get<string>('DATABASE_URL');
 
@@ -75,7 +71,6 @@ export function buildTypeOrmConfig(
   //     },
   //   };
   // }
-  // Production (Render)
   if (process.env.NODE_ENV === 'production') {
     return {
       type: 'postgres',

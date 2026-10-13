@@ -104,15 +104,11 @@ async function bootstrap() {
     }),
   );
 
-  // IMPORTANT:
-  // Use default websocket adapter
-  // Redis disabled for Render stability
+  // Use the default WebSocket adapter for local development.
   console.log('🌐 Using default WebSocket adapter');
 
-  // Render provides PORT automatically
   const port = Number(process.env.PORT) || 3000;
 
-  // Render requires 0.0.0.0
   const host = '0.0.0.0';
 
   try {
