@@ -99,6 +99,14 @@
           </template>
           <v-list-item-title>Card Management</v-list-item-title>
         </v-list-item>
+
+        <v-list-item :class="{ 'active-menu-item': activeTab === 'credits' }" @click="activeTab = 'credits'"
+          class="menu-item">
+          <template v-slot:prepend>
+            <v-icon>mdi-coins</v-icon>
+          </template>
+          <v-list-item-title>Room Credits</v-list-item-title>
+        </v-list-item>
       </v-list>
 
       <template v-slot:append>
@@ -136,6 +144,11 @@
           <!-- Card Management Tab -->
           <v-window-item value="cards">
             <AdminCardsTab />
+          </v-window-item>
+
+          <!-- Room Credits Tab -->
+          <v-window-item value="credits">
+            <AdminRoomCreditsTab />
           </v-window-item>
 
           <!-- Profile Tab -->
@@ -215,6 +228,7 @@ import AdminRoomsTab from '../components/admin/AdminRoomsTab.vue';
 import AdminUsersTab from '../components/admin/AdminUsersTab.vue';
 import AdminRegisterTab from '../components/admin/AdminRegisterTab.vue';
 import AdminCardsTab from '../components/admin/AdminCardsTab.vue';
+import AdminRoomCreditsTab from '../components/admin/AdminRoomCreditsTab.vue';
 import AdminProfileTab from '../components/admin/AdminProfileTab.vue';
 
 const { mdAndUp } = useDisplay();

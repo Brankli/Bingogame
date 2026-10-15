@@ -14,6 +14,7 @@ import * as redisStore from 'cache-manager-redis-store';
 import type { ClientOpts } from 'redis';
 import { CardModule } from './card/card.module';
 import { buildTypeOrmConfig } from './config/database.config';
+import { RoomCreditModule } from './room-credit/room-credit.module';
 
 const isElectron =
   process.env.ELECTRON_MODE === 'true' ||
@@ -35,14 +36,18 @@ const getStaticFilesPath = () => {
   if (isElectron) {
     const path = require('path');
 
-    if (process.resourcesPath) {
-      return path.join(
-        process.resourcesPath,
-        'app.asar.unpacked',
-        'client',
-        'dist',
-      );
-    }
+const resourcesPath = (process as NodeJS.Process & {
+  resourcesPath?: string;
+}).resourcesPath;
+
+if (resourcesPath) {
+  return path.join(
+    resourcesPath,
+    'app.asar.unpacked',
+    'client',
+    'dist',
+  );
+}
 
     // Fallback for local development
     return path.join(__dirname, '..', '..', 'client', 'dist');
@@ -92,6 +97,7 @@ const getStaticFilesPath = () => {
     SocketsModule,
     MatchModule,
     CardModule,
+    RoomCreditModule,
   ],
   controllers: [AppController],
   providers: [AppService],

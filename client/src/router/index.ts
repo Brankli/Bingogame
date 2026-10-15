@@ -1,7 +1,7 @@
 import { createRouter, createWebHashHistory, RouteRecordRaw } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import AdminDashboard from '../views/AdminDashboard.vue'
-import BingoRoomView from '../views/BingoRoomView.vue'
+import BingoRoomView from '../views/BingoRoomview.vue'
 import { useAuth } from '@/store/auth'
 import { AuthService } from '@/services/AuthService'
 

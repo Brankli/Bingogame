@@ -8,6 +8,10 @@ import {
   EarningsTransaction,
   TransactionType,
 } from './entities/earnings-transaction.entity';
+import {
+  UserCreditTransaction,
+  CreditTransactionType,
+} from './entities/user-credit-transaction.entity';
 
 @Injectable()
 export class UserService {
@@ -16,6 +20,8 @@ export class UserService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(EarningsTransaction)
     private readonly earningsRepository: Repository<EarningsTransaction>,
+    @InjectRepository(UserCreditTransaction)
+    private readonly creditTransactionRepository: Repository<UserCreditTransaction>,
   ) {}
   async create(createUserDto: CreateUserDto): Promise<User> {
     return await this.userRepository.save({
@@ -32,6 +38,8 @@ export class UserService {
         'role',
         'houseFee',
         'totalEarnings',
+        'credits',
+        'gamesPlayed',
         'createdAt',
         'lastActive',
       ],
@@ -58,6 +66,8 @@ export class UserService {
           'role',
           'houseFee',
           'totalEarnings',
+          'credits',
+          'gamesPlayed',
           'createdAt',
           'lastActive',
         ],
@@ -200,5 +210,145 @@ export class UserService {
 
   async resetDailyHouseFee(userId: number): Promise<void> {
     await this.userRepository.update({ id: userId }, { houseFee: 0 });
+  }
+
+  /**
+   * Add credits to a user's account.
+   */
+  async addCredits(
+    userId: number,
+    amount: number,
+    adminId: number,
+    notes?: string,
+  ): Promise<{ success: boolean; newBalance: number }> {
+    const user = await this.userRepository.findOneBy({ id: userId });
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    const balanceBefore = user.credits || 0;
+    const balanceAfter = balanceBefore + amount;
+
+    await this.userRepository.update({ id: userId }, { credits: balanceAfter });
+
+    await this.creditTransactionRepository.save({
+      user: { id: userId } as User,
+      amount,
+      balanceBefore,
+      balanceAfter,
+      type: CreditTransactionType.ADMIN_ADD,
+      notes: notes?.trim() || undefined,
+      adminId,
+    });
+
+    return { success: true, newBalance: balanceAfter };
+  }
+
+  /**
+   * Deduct 1 credit from user and increment gamesPlayed counter.
+   * Called when a game starts.
+   */
+  async deductCredit(
+    userId: number,
+    roomId: number,
+  ): Promise<{ success: boolean; credits: number; gamesPlayed: number }> {
+    const user = await this.userRepository.findOneBy({ id: userId });
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    const balanceBefore = user.credits || 0;
+    if (balanceBefore <= 0) {
+      throw new Error('Insufficient credits');
+    }
+
+    const balanceAfter = balanceBefore - 1;
+    const newGamesPlayed = (user.gamesPlayed || 0) + 1;
+
+    await this.userRepository.update(
+      { id: userId },
+      { credits: balanceAfter, gamesPlayed: newGamesPlayed },
+    );
+
+    await this.creditTransactionRepository.save({
+      user: { id: userId } as User,
+      amount: -1,
+      balanceBefore,
+      balanceAfter,
+      type: CreditTransactionType.GAME_DEDUCTION,
+      notes: `Game started in room ${roomId}`,
+      roomId,
+    });
+
+    return {
+      success: true,
+      credits: balanceAfter,
+      gamesPlayed: newGamesPlayed,
+    };
+  }
+
+  /**
+   * Reset gamesPlayed counter to 0.
+   */
+  async resetGamesPlayed(
+    userId: number,
+    adminId: number,
+  ): Promise<{ success: boolean }> {
+    const user = await this.userRepository.findOneBy({ id: userId });
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    await this.userRepository.update({ id: userId }, { gamesPlayed: 0 });
+
+    await this.creditTransactionRepository.save({
+      user: { id: userId } as User,
+      amount: 0,
+      balanceBefore: user.credits || 0,
+      balanceAfter: user.credits || 0,
+      type: CreditTransactionType.COUNTER_RESET,
+      notes: 'Games played counter reset to 0',
+      adminId,
+    });
+
+    return { success: true };
+  }
+
+  /**
+   * Get credit transaction history for a specific user.
+   */
+  async getUserCreditTransactions(
+    userId: number,
+  ): Promise<UserCreditTransaction[]> {
+    return this.creditTransactionRepository.find({
+      where: { user: { id: userId } },
+      order: { createdAt: 'DESC' },
+      take: 200,
+    });
+  }
+
+  /**
+   * Get credits summary for all users.
+   */
+  async getAllUsersCredits(): Promise<
+    Array<{
+      id: number;
+      username: string;
+      role: UserRole;
+      credits: number;
+      gamesPlayed: number;
+    }>
+  > {
+    const users = await this.userRepository.find({
+      select: ['id', 'username', 'role', 'credits', 'gamesPlayed'],
+    });
+
+    return users.map((u) => ({
+      id: u.id,
+      username: u.username,
+      role: u.role,
+      credits: u.credits || 0,
+      gamesPlayed: u.gamesPlayed || 0,
+    }));
   }
 }

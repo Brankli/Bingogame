@@ -1,0 +1,99 @@
+### User Credit System API Tests
+### Use with REST Client extension in VS Code or similar HTTP client
+### Replace {{adminToken}} and {{userId}} with actual values
+
+@baseUrl = http://localhost:3000/api
+@adminToken = YOUR_ADMIN_TOKEN_HERE
+@userId = 1
+
+### 1. Login as Admin (Get Token)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "admin123"
+}
+
+### 2. Get All Users with Credits Summary
+POST {{baseUrl}}/users/credits/summary
+Authorization: Bearer {{adminToken}}
+
+### 3. Add Credits to User
+POST {{baseUrl}}/users/{{userId}}/credits/add
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "amount": 100,
+  "notes": "Testing credit addition via API"
+}
+
+### 4. Get User Credit Transaction History
+GET {{baseUrl}}/users/{{userId}}/credits/transactions
+Authorization: Bearer {{adminToken}}
+
+### 5. Reset User Games Played Counter
+POST {{baseUrl}}/users/{{userId}}/credits/reset
+Authorization: Bearer {{adminToken}}
+
+### 6. Get Specific User Details (verify credits and gamesPlayed)
+GET {{baseUrl}}/users/{{userId}}
+Authorization: Bearer {{adminToken}}
+
+### 7. Get All Users (includes credits and gamesPlayed fields)
+GET {{baseUrl}}/users
+Authorization: Bearer {{adminToken}}
+
+###############################################################################
+# Expected Responses
+###############################################################################
+
+# Response 2 (Credits Summary):
+# [
+#   {
+#     "id": 1,
+#     "username": "john",
+#     "credits": 100,
+#     "gamesPlayed": 25,
+#     "role": "user"
+#   }
+# ]
+
+# Response 3 (Add Credits):
+# {
+#   "id": 1,
+#   "username": "john",
+#   "credits": 200,
+#   "gamesPlayed": 25
+# }
+
+# Response 4 (Transaction History):
+# [
+#   {
+#     "id": 5,
+#     "amount": 100,
+#     "type": "admin_add",
+#     "balanceBefore": 100,
+#     "balanceAfter": 200,
+#     "notes": "Testing credit addition via API",
+#     "createdAt": "2026-10-15T04:00:00.000Z"
+#   },
+#   {
+#     "id": 4,
+#     "amount": -1,
+#     "type": "game_deduction",
+#     "balanceBefore": 101,
+#     "balanceAfter": 100,
+#     "roomId": 5,
+#     "createdAt": "2026-10-15T03:55:00.000Z"
+#   }
+# ]
+
+# Response 5 (Reset Counter):
+# {
+#   "id": 1,
+#   "username": "john",
+#   "credits": 200,
+#   "gamesPlayed": 0
+# }

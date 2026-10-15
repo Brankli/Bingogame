@@ -82,6 +82,8 @@
             <th class="text-left">Role</th>
             <th class="text-left">House Fee</th>
             <th class="text-left">Total Earnings</th>
+            <th class="text-left">Credits</th>
+            <th class="text-left">Games Played</th>
             <th class="text-left">Created</th>
             <th class="text-left">Last Active</th>
             <th class="text-left">Actions</th>
@@ -190,6 +192,46 @@
                 </v-list>
               </v-menu>
               <span v-else>-</span>
+            </td>
+            
+            <!-- Credits with Actions -->
+            <td>
+              <div class="d-flex align-center gap-2">
+                <v-chip 
+                  :color="(u.credits || 0) > 0 ? 'info' : 'grey'" 
+                  size="small"
+                >
+                  {{ u.credits || 0 }}
+                </v-chip>
+                <v-btn
+                  color="success"
+                  variant="elevated"
+                  size="x-small"
+                  @click="openAddCreditsDialog(u)"
+                  prepend-icon="mdi-plus"
+                >
+                  Add
+                </v-btn>
+              </div>
+            </td>
+            
+            <!-- Games Played with Reset -->
+            <td>
+              <div class="d-flex align-center gap-2">
+                <v-chip size="small" color="primary">
+                  {{ u.gamesPlayed || 0 }}
+                </v-chip>
+                <v-btn
+                  v-if="(u.gamesPlayed || 0) > 0"
+                  color="warning"
+                  variant="elevated"
+                  size="x-small"
+                  @click="openResetCounterDialog(u)"
+                  prepend-icon="mdi-refresh"
+                >
+                  Reset
+                </v-btn>
+              </div>
             </td>
             
             <!-- Created -->
@@ -719,6 +761,117 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Add Credits Dialog -->
+    <v-dialog v-model="showAddCreditsDialog" max-width="600">
+      <v-card>
+        <v-card-title>
+          <v-icon class="mr-2" color="info">mdi-coin</v-icon>
+          Add Credits - {{ selectedCreditUser?.username }}
+        </v-card-title>
+        
+        <v-card-text>
+          <v-alert type="info" variant="tonal" class="mb-4">
+            <strong>Current Credits:</strong> {{ selectedCreditUser?.credits || 0 }}<br>
+            <strong>Games Played:</strong> {{ selectedCreditUser?.gamesPlayed || 0 }}
+          </v-alert>
+
+          <v-text-field
+            v-model.number="creditAmount"
+            label="Credits to Add"
+            type="number"
+            variant="outlined"
+            min="1"
+            prepend-inner-icon="mdi-coin"
+            class="mb-4"
+          />
+
+          <v-textarea
+            v-model="creditNotes"
+            label="Notes (optional)"
+            variant="outlined"
+            rows="2"
+            placeholder="Enter notes for this credit addition..."
+          />
+
+          <!-- Credit Transaction History -->
+          <v-divider class="my-4" />
+          <div class="text-subtitle-2 mb-2">Credit Transaction History</div>
+          <v-progress-linear v-if="loadingCreditHistory" indeterminate class="mb-4" />
+          <v-table v-else-if="creditTransactions.length > 0" density="compact">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Amount</th>
+                <th>Before</th>
+                <th>After</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="tx in creditTransactions.slice(0, 5)" :key="tx.id">
+                <td><small>{{ formatDate(tx.createdAt) }}</small></td>
+                <td><v-chip size="x-small">{{ formatCreditTransactionType(tx.type) }}</v-chip></td>
+                <td :class="tx.amount >= 0 ? 'text-success' : 'text-error'">
+                  {{ tx.amount >= 0 ? '+' : '' }}{{ tx.amount }}
+                </td>
+                <td>{{ tx.balanceBefore }}</td>
+                <td>{{ tx.balanceAfter }}</td>
+                <td><small>{{ tx.notes || '—' }}</small></td>
+              </tr>
+            </tbody>
+          </v-table>
+          <v-alert v-else type="info" variant="tonal" density="compact">
+            No credit history yet.
+          </v-alert>
+        </v-card-text>
+
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="showAddCreditsDialog = false">Cancel</v-btn>
+          <v-btn 
+            color="info" 
+            @click="confirmAddCredits"
+            :loading="addingCredits"
+            :disabled="!creditAmount || creditAmount <= 0"
+          >
+            Add Credits
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Reset Counter Dialog -->
+    <v-dialog v-model="showResetCounterDialog" max-width="500">
+      <v-card>
+        <v-card-title>
+          <v-icon class="mr-2" color="warning">mdi-refresh</v-icon>
+          Reset Games Played Counter
+        </v-card-title>
+        
+        <v-card-text>
+          <v-alert type="warning" variant="tonal" class="mb-4">
+            <strong>User:</strong> {{ selectedCreditUser?.username }}<br>
+            <strong>Current Games Played:</strong> {{ selectedCreditUser?.gamesPlayed || 0 }}
+          </v-alert>
+
+          <p>Are you sure you want to reset the games played counter to 0? This action will be logged in the credit transaction history.</p>
+        </v-card-text>
+
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="showResetCounterDialog = false">Cancel</v-btn>
+          <v-btn 
+            color="warning" 
+            @click="confirmResetCounter"
+            :loading="resettingCounter"
+          >
+            Reset Counter
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-card>
 </template>
 
@@ -785,6 +938,17 @@ const {
   getAdjustmentIcon,
   getAdjustmentTitle,
 } = useEarningsManagement(services);
+
+// Credit Management State
+const showAddCreditsDialog = ref(false);
+const showResetCounterDialog = ref(false);
+const selectedCreditUser = ref<any>(null);
+const creditAmount = ref(0);
+const creditNotes = ref('');
+const creditTransactions = ref<any[]>([]);
+const loadingCreditHistory = ref(false);
+const addingCredits = ref(false);
+const resettingCounter = ref(false);
 
 // Filter Options
 const activityFilterOptions = [
@@ -954,6 +1118,80 @@ async function confirmAdjustment() {
     showToast(error.response?.data?.message || 'Failed to adjust earnings', 'error');
   } finally {
     adjusting.value = false;
+  }
+}
+
+// Credit Management Functions
+function formatCreditTransactionType(type: string): string {
+  const typeMap: Record<string, string> = {
+    'top_up': 'Top Up',
+    'game_deduction': 'Game',
+    'admin_add': 'Admin Add',
+    'admin_subtract': 'Admin Remove',
+    'counter_reset': 'Counter Reset',
+  };
+  return typeMap[type] || type;
+}
+
+async function openAddCreditsDialog(user: any) {
+  selectedCreditUser.value = user;
+  creditAmount.value = 0;
+  creditNotes.value = '';
+  showAddCreditsDialog.value = true;
+  
+  // Load credit transaction history
+  loadingCreditHistory.value = true;
+  try {
+    const response = await services?.userService.getUserCreditTransactions(user.id);
+    creditTransactions.value = response?.data?.data || [];
+  } catch (error) {
+    console.error('Failed to load credit transactions:', error);
+    creditTransactions.value = [];
+  } finally {
+    loadingCreditHistory.value = false;
+  }
+}
+
+async function confirmAddCredits() {
+  if (!selectedCreditUser.value || creditAmount.value <= 0) return;
+  
+  addingCredits.value = true;
+  try {
+    await services?.userService.addUserCredits(
+      selectedCreditUser.value.id,
+      creditAmount.value,
+      creditNotes.value
+    );
+    
+    showToast(`Added ${creditAmount.value} credits successfully!`, 'success');
+    showAddCreditsDialog.value = false;
+    await loadUsers();
+  } catch (error: any) {
+    showToast(error.response?.data?.message || 'Failed to add credits', 'error');
+  } finally {
+    addingCredits.value = false;
+  }
+}
+
+async function openResetCounterDialog(user: any) {
+  selectedCreditUser.value = user;
+  showResetCounterDialog.value = true;
+}
+
+async function confirmResetCounter() {
+  if (!selectedCreditUser.value) return;
+  
+  resettingCounter.value = true;
+  try {
+    await services?.userService.resetUserGamesPlayed(selectedCreditUser.value.id);
+    
+    showToast('Games played counter reset successfully!', 'success');
+    showResetCounterDialog.value = false;
+    await loadUsers();
+  } catch (error: any) {
+    showToast(error.response?.data?.message || 'Failed to reset counter', 'error');
+  } finally {
+    resettingCounter.value = false;
   }
 }
 

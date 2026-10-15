@@ -11,6 +11,10 @@ export class UserDto {
 
   totalEarnings: number;
 
+  credits: number;
+
+  gamesPlayed: number;
+
   createdAt: Date;
 
   lastActive: Date;
@@ -23,6 +27,8 @@ export function mapToUserDto(user: User): UserDto {
     role: user.role,
     houseFee: user.houseFee ?? 0,
     totalEarnings: user.totalEarnings ?? 0,
+    credits: user.credits ?? 0,
+    gamesPlayed: user.gamesPlayed ?? 0,
     createdAt: user.createdAt,
     lastActive: user.lastActive,
   };

@@ -14,3 +14,4 @@ export const RESET_MATCH_EVENT = 'reset-match';
 export const END_MATCH_EVENT = 'end-match';
 export const MATCH_ENDED_EVENT = 'match-ended';
 export const PLAYER_WON_EVENT = 'player-won';
+export const ROOM_CREDITS_UPDATED_EVENT = 'room-credits-updated';

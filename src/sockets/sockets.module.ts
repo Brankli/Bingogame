@@ -6,6 +6,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UserModule } from '../user/user.module';
 import { MatchModule } from '../match/match.module';
+import { RoomCreditModule } from '../room-credit/room-credit.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { MatchModule } from '../match/match.module';
     AuthModule,
     UserModule,
     forwardRef(() => MatchModule),
+    forwardRef(() => RoomCreditModule),
   ],
   providers: [SocketsGateway],
   exports: [SocketsGateway],

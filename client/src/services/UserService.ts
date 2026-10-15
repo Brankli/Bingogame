@@ -55,4 +55,23 @@ export class UserService extends Api {
     public getEarningsHistory(userId: number): AxiosPromise<{ data: EarningsTransaction[] } | EarningsTransaction[]> {
         return this.httpClient.get(`/users/${userId}/earnings-history`);
     }
+
+    public addUserCredits(userId: number, amount: number, notes?: string): AxiosPromise<any> {
+        return this.httpClient.post(`/users/${userId}/credits/add`, {
+            amount,
+            notes,
+        });
+    }
+
+    public resetUserGamesPlayed(userId: number): AxiosPromise<any> {
+        return this.httpClient.post(`/users/${userId}/credits/reset`);
+    }
+
+    public getUserCreditTransactions(userId: number): AxiosPromise<any> {
+        return this.httpClient.get(`/users/${userId}/credits/transactions`);
+    }
+
+    public getAllUsersCredits(): AxiosPromise<any> {
+        return this.httpClient.post(`/users/credits/summary`);
+    }
 }

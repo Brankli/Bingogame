@@ -130,8 +130,7 @@
 
         <div class="info-box text-center">
           <div class="info-label">GAME NUMBER</div>
-          <div class="game-number-val">{{ room.currentMatch?.id || '0' }}</div>
-
+          <div class="game-number-val">{{ user?.gamesPlayed || 0 }}</div>
         </div>
 
         <div class="info-box wallet-box wallet-status-banner text-center">
@@ -163,9 +162,17 @@
         {{ registeredCards.length }} card{{ registeredCards.length === 1 ? '' : 's' }} registered
       </div> -->
 
-      <button type="button" class="terminal-start-btn" :disabled="registeredCards.length === 0" @click="startNewGame">
-        Start Game
-      </button>
+      <div class="terminal-action-row">
+        <button type="button" class="terminal-start-btn" 
+          :disabled="registeredCards.length === 0 || (user?.credits || 0) <= 0" 
+          @click="startNewGame">
+          Start Game
+        </button>
+        <button type="button" class="terminal-clear-btn" :disabled="registeredCards.length === 0" @click="clearRegisteredCards">
+          <v-icon size="small" class="mr-1">mdi-close-circle</v-icon>
+          Clear Cards
+        </button>
+      </div>
 
     </div>
 
@@ -354,7 +361,18 @@
                   <strong class="card-detail-number">
                     Card #{{ selectedCardForView }}
                   </strong>
-                  <div class="card-detail-close-box">
+                  <div class="card-detail-close-box d-flex gap-2">
+                    <!-- Lock Card Button (always visible for manager control) -->
+                    <v-btn
+                      v-if="verificationResult"
+                      color="error"
+                      size="small"
+                      variant="elevated"
+                      @click="lockCardManually"
+                      prepend-icon="mdi-lock"
+                    >
+                      Lock Card
+                    </v-btn>
                     <v-btn class="card-detail-close" icon size="small" variant="text" aria-label="Close card details"
                       @click="
                         showCardDetailsModal = false;
@@ -504,50 +522,7 @@
           </div>
         </v-card>
 
-        <!-- Winning Pattern Visualization (when valid win OR late claim) -->
-        <v-card class="winning-pattern-card mt-4"
-          :class="{ 'late-claim-card': verificationResult && verificationResult.lateClaim }"
-          v-if="verificationResult && (verificationResult.isValid || verificationResult.lateClaim)">
-          <v-card-title class="winning-title" :class="{ 'late-claim-title': verificationResult.lateClaim }">
-            <v-icon class="mr-2">{{ verificationResult.lateClaim ? 'mdi-clock-alert' : 'mdi-trophy' }}</v-icon>
-            <span v-if="verificationResult.lateClaim" style="color: #d32f2f;">
-              LATE CLAIM - Pattern Completed Earlier
-            </span>
-            <span v-else-if="verificationResult.patternNames && verificationResult.patternNames.length > 1">
-              Winning Patterns ({{ verificationResult.patternNames.length }}): {{
-                verificationResult.patternNames.join(', ') }}
-            </span>
-            <span v-else-if="verificationResult.patternNames && verificationResult.patternNames.length === 1">
-              Winning Pattern: {{ verificationResult.patternNames[0] }}
-            </span>
-            <span v-else>
-              Winning Pattern - {{ activePattern.toUpperCase() }}
-            </span>
-          </v-card-title>
-          <v-card-text class="pa-4">
-            <v-alert v-if="verificationResult.lateClaim" type="error" variant="tonal" density="compact" class="mb-3">
-              <v-icon class="mr-2">mdi-alert-circle</v-icon>
-              This pattern was completed earlier. You must call BINGO immediately when you win!
-            </v-alert>
-            <v-alert v-else-if="verificationResult.patternNames && verificationResult.patternNames.length > 1"
-              type="success" variant="tonal" density="compact" class="mb-3">
-              <v-icon class="mr-2">mdi-star-circle</v-icon>
-              This card matches {{ verificationResult.patternNames.length }} different winning patterns!
-            </v-alert>
-            <table class="winning-grid">
-              <tbody>
-                <tr v-for="row in 5" :key="row">
-                  <td v-for="col in 5" :key="col" class="winning-cell" :class="{
-                    'winning-marked': isWinningPatternCell(row - 1, col - 1),
-                    'free-space': row === 3 && col === 3
-                  }">
-                    {{ row === 3 && col === 3 ? 'FREE' : getWinningCardCellValue(row - 1, col - 1) }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </v-card-text>
-        </v-card>
+        <!-- Pattern grid removed - card details modal is sufficient -->
 
         <!-- User Management (Admin Only) -->
         <div v-if="isAdmin && showUserManagement" class="mt-4">
@@ -582,6 +557,30 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Clear Cards Confirmation Dialog -->
+    <v-dialog v-model="showClearCardsDialog" max-width="450" persistent>
+      <v-card>
+        <v-card-title class="text-h6 bg-warning">
+          <v-icon class="mr-2">mdi-alert</v-icon>
+          Clear Registered Cards
+        </v-card-title>
+        <v-card-text class="pt-4">
+          <p class="mb-2">Are you sure you want to clear all {{ registeredCards.length }} registered card{{ registeredCards.length === 1 ? '' : 's' }}?</p>
+          <p class="text-caption text-medium-emphasis">This action cannot be undone. You will need to register cards again.</p>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn color="grey" variant="text" @click="cancelClearCards">
+            Cancel
+          </v-btn>
+          <v-btn color="warning" variant="elevated" @click="confirmClearCards">
+            <v-icon class="mr-1">mdi-close-circle</v-icon>
+            Clear Cards
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 
   <!-- Loading State -->
@@ -593,7 +592,7 @@
 
 <script setup lang="ts">
 /* eslint-disable no-undef */
-import { ref, computed, inject, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, inject, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuth } from '@/store/auth';
 import { useSocket } from '@/store/socket';
@@ -634,7 +633,17 @@ const matchWinners = ref<Array<{ cardNumber: string; timestamp: Date; specialWin
 const registeredCards = ref<number[]>([]); // Array of registered card numbers
 const cardCatalog = ref<number[]>([]);
 const selectedCardForView = ref<number | null>(null); // Card selected for viewing details
-const betAmount = ref(10); // Bet amount per card in Birr
+const showClearCardsDialog = ref(false); // Dialog for confirming card clear
+
+// Load bet amount from localStorage, default to 10 if not set
+const STORAGE_KEY_BET_AMOUNT = 'bingo_bet_amount';
+const STORAGE_KEY_REGISTERED_CARDS = 'bingo_registered_cards';
+
+const savedBetAmount = localStorage.getItem(STORAGE_KEY_BET_AMOUNT);
+console.log('[BingoRoom] Loaded bet amount from localStorage:', savedBetAmount);
+const betAmount = ref(savedBetAmount ? Number(savedBetAmount) : 10); // Bet amount per card in Birr
+console.log('[BingoRoom] Initial betAmount:', betAmount.value);
+
 const houseFee = ref(20); // House fee percentage per card
 const houseFeeOptions = Array.from({ length: 17 }, (_, index) => {
   const value = 20 + index * 5;
@@ -1282,7 +1291,7 @@ const callNextNumber = () => {
   }
 
   if (calledNumbers.value.length >= 75) {
-    showToast('All numbers have been called!', 'info');
+    // Audio feedback only - no toast
     return;
   }
 
@@ -1316,7 +1325,7 @@ const toggleAutoCall = () => {
   if (autoCallEnabled.value) {
     if (gameStatus.value === 'playing') {
       startAutoCall();
-      showToast('Auto-call enabled', 'success');
+      // Audio feedback only - no toast
     } else {
       autoCallEnabled.value = false;
       showToast('Start a game first to enable auto-call', 'warning');
@@ -1327,7 +1336,7 @@ const toggleAutoCall = () => {
       window.clearTimeout(initialCallTimeout);
       initialCallTimeout = null;
     }
-    showToast('Auto-call disabled', 'info');
+    // Audio feedback only - no toast
   }
 };
 
@@ -1379,7 +1388,8 @@ const resetGame = () => {
   verificationResult.value = null;
   verifyCardNumber.value = '';
   matchWinners.value = [];
-  registeredCards.value = [];
+  // DON'T clear registeredCards - keep them for next game
+  // registeredCards.value = [];
   selectedCardForView.value = null;
   selectedCardGrid.value = null;
   showCardDetailsModal.value = false;
@@ -1389,7 +1399,7 @@ const resetGame = () => {
     services?.cardService.unlockMatch(room.value.currentMatch.id);
   }
 
-  showToast('Game reset successfully', 'success');
+  // No toast message needed - reset action is self-evident
 };
 
 const verifyWin = async () => {
@@ -1450,29 +1460,12 @@ const verifyWin = async () => {
 
       // Check if it's a special win (unlucky winner - zero marks after 12 calls)
       if (response?.data.specialWin) {
-        const specialMessage = `🎉 SPECIAL WIN! Card ${normalizedCardNumber} has zero numbers marked after 12 calls - Unlucky Winner!`;
-        showToast(specialMessage, 'success');
+        // Only audio feedback for special win - no toast
         speakMessage(`Special win! Card ${normalizedCardNumber} is the unlucky winner with no numbers marked.`);
       } else {
         const patternTitle = getPatternTitle(activePattern.value);
-        const patternDetails = getWinningPatternDetails();
-
-        // Show winner count if multiple winners
-        const winnerCount = matchWinners.value.length;
-        const winnerInfo = winnerCount > 1 ? ` (Winner #${winnerCount})` : '';
-
-        const serverMessage = response?.data.message?.trim();
-        const successMessage =
-          serverMessage ||
-          `Card ${normalizedCardNumber} wins with ${patternTitle}${winnerInfo}. ${patternDetails ? `Pattern: ${patternDetails}` : ''}`.trim();
-        showToast(successMessage, 'success');
+        // Only audio feedback for regular win - no toast
         speakMessage(`Congratulations! ${normalizedCardNumber} is a valid ${patternTitle} winner.`);
-      }
-
-      // Show multiple winners info
-      if (matchWinners.value.length > 1) {
-        const winnersInfo = `Total winners: ${matchWinners.value.length} - Prize will be split equally.`;
-        showToast(winnersInfo, 'info');
       }
 
       // Keep game PAUSED to allow verifying more winners
@@ -1480,10 +1473,6 @@ const verifyWin = async () => {
 
       // Clear the input for next verification
       verifyCardNumber.value = '';
-
-      // Show message about verifying more winners
-      const moreWinnersMessage = `Winner verified! You can verify more winners or click "Finish Game" to end.`;
-      showToast(moreWinnersMessage, 'info');
     } else if (response?.data.unregistered) {
       // Card is not registered for this match - BLOCK verification
       speakMessage(`Card not registered. Only registered cards can win.`);
@@ -1501,50 +1490,21 @@ const verifyWin = async () => {
       if (isLateClaim) {
         // Late BINGO claim - pattern was completed earlier
         // BUT still show the winning pattern so manager can see what was completed
-        const lateClaimMessage = `❌ LATE CLAIM! ${response?.data.message || 'You must call BINGO immediately when you win!'}`;
-        showToast(lateClaimMessage, 'error');
-
-        // Play the late-claim event audio
-        if (currentLanguage.value === 'am') {
-          try {
-            await amharicAudio.playEvent('winner-invalid');
-            console.log('[Audio Debug] ✅ Played late claim event audio');
-          } catch (error) {
-            console.error('[Audio Debug] ❌ Error playing late claim audio:', error);
-            // Fallback to text-to-speech
-            speakMessage('Late claim rejected. You must call BINGO immediately. Click the resume button.');
-          }
-        } else {
-          speakMessage('Late claim rejected. You must call BINGO immediately. Click the resume button.');
-        }
-
-        // Show additional info about the late claim
-        if (response?.data.patternNames && response?.data.patternNames.length > 0) {
-          const patternInfo = `Pattern completed: ${response.data.patternNames.join(', ')}`;
-          showToast(patternInfo, 'warning');
-        }
-
+        // NO AUDIO, NO TOAST - Manager has full control via Lock button
+        
         // NOTE: verificationResult is already set above, so the pattern will display
         // The winning pattern grid will show even though it's a late claim
+        // The "Lock Card" button will be visible in the card details modal for manager
 
-        // Don't auto-resume - let manager click resume button
-        showToast('Click RESUME button to continue the game', 'info');
+        // Don't auto-resume - let manager click resume button or lock the card
       } else {
-        // Regular invalid claim - lock the card
-        const invalidMessage = `Invalid win. Card ${normalizedCardNumber} will be locked until game ends.`;
-        showToast(invalidMessage, 'error');
-        speakMessage(`Invalid win for ${normalizedCardNumber}. The card is now locked.`);
+        // Regular invalid claim - NO AUTO-LOCK
+        // Manager will see the "Lock Card" button in card details modal and decide
+        // NO TOAST - only audio feedback
+        speakMessage(`Invalid win for ${normalizedCardNumber}.`);
 
-        // Lock the card
-        if (room.value?.currentMatch?.id) {
-          await services?.cardService.lockCard(normalizedCardNumber, room.value.currentMatch.id);
-        }
-
-        if (matchWinners.value.length > 0) {
-          showToast('Invalid claim. Game remains paused because valid winners exist.', 'info');
-        } else {
-          showToast('Click RESUME to continue calling numbers.', 'info');
-        }
+        // Audio message informs about the invalid claim
+        // Manager can manually lock using the "Lock Card" button in card details
       }
     }
   } catch (error) {
@@ -1553,6 +1513,44 @@ const verifyWin = async () => {
     showToast(message, 'error');
   } finally {
     verifying.value = false;
+  }
+};
+
+// Manual lock function for late claims
+const lockCardManually = async () => {
+  if (!verifyCardNumber.value || !room.value?.currentMatch?.id) {
+    return;
+  }
+
+  try {
+    await services?.cardService.lockCard(verifyCardNumber.value, room.value.currentMatch.id);
+    
+    // Play card-locked audio event
+    if (currentLanguage.value === 'am') {
+      try {
+        await amharicAudio.playEvent('card-locked');
+        console.log('[Audio Debug] ✅ Played card-locked event audio');
+      } catch (error) {
+        console.error('[Audio Debug] ❌ Error playing card-locked audio:', error);
+        // Fallback to text-to-speech
+        speakMessage(`Card ${verifyCardNumber.value} is now locked for this match.`);
+      }
+    } else {
+      speakMessage(`Card ${verifyCardNumber.value} is now locked for this match.`);
+    }
+    
+    // Close the card details modal
+    showCardDetailsModal.value = false;
+    selectedCardForView.value = null;
+    selectedCardGrid.value = null;
+    
+    // Clear verification result
+    verificationResult.value = null;
+    verifyCardNumber.value = '';
+  } catch (error) {
+    console.error('Error locking card:', error);
+    // Only show error toasts, not success
+    showToast('Failed to lock card. Please try again.', 'error');
   }
 };
 
@@ -1567,7 +1565,7 @@ const saveBettingSettings = async () => {
   try {
     await services?.roomService.ticketPrice(roomId.value, Number(betAmount.value || 0));
     showBettingModal.value = false;
-    showToast('Ticket price updated successfully!', 'success');
+    // Audio feedback only - no toast
 
     // Refresh room data to show updated ticket price
     await loadRoomData();
@@ -1588,7 +1586,17 @@ const loadRoomData = async () => {
       .map((card) => card.index)
       .filter((index) => Number.isInteger(index) && index > 0)
       .sort((a, b) => a - b);
-    betAmount.value = Number(room.value?.ticketPrice || 0);
+    
+    // Only set betAmount from room if there's no saved value in localStorage
+    const hasSavedBetAmount = localStorage.getItem(STORAGE_KEY_BET_AMOUNT);
+    console.log('[BingoRoom] Has saved bet amount:', hasSavedBetAmount);
+    console.log('[BingoRoom] Room ticket price:', room.value?.ticketPrice);
+    if (!hasSavedBetAmount && room.value?.ticketPrice) {
+      console.log('[BingoRoom] Setting bet amount from room ticket price:', room.value.ticketPrice);
+      betAmount.value = Number(room.value.ticketPrice);
+    } else {
+      console.log('[BingoRoom] Keeping saved bet amount:', betAmount.value);
+    }
 
     // Load pattern from active match if available
     if (room.value?.currentMatch?.pattern && !room.value.currentMatch.closed) {
@@ -1722,6 +1730,29 @@ const isWinningPatternCell = (row: number, col: number) => {
   return winningPattern.some((cell) => cell[0] === row && cell[1] === col);
 };
 
+// Watch betAmount and save to localStorage
+watch(betAmount, (newAmount) => {
+  console.log('[BingoRoom] Bet amount changed to:', newAmount, '- Saving to localStorage');
+  localStorage.setItem(STORAGE_KEY_BET_AMOUNT, String(newAmount));
+});
+
+// Function to show confirmation dialog for clearing cards
+const clearRegisteredCards = () => {
+  showClearCardsDialog.value = true;
+};
+
+// Function to confirm and clear registered cards
+const confirmClearCards = () => {
+  registeredCards.value = [];
+  showClearCardsDialog.value = false;
+  // No toast message needed - dialog confirmation is enough
+};
+
+// Function to cancel clearing cards
+const cancelClearCards = () => {
+  showClearCardsDialog.value = false;
+};
+
 onMounted(async () => {
   try {
     console.log('Loading room:', roomId.value);
@@ -1780,6 +1811,21 @@ onMounted(async () => {
       isNumberCalled,
     });
     setupRoomSocket();
+
+    // Listen for credit updates after game start
+    socketStore.client?.on('game-started', (data: { credits: number; gamesPlayed: number }) => {
+      console.log('[BingoRoom] Game started - updating credits:', data);
+      if (user && data) {
+        user.credits = data.credits;
+        user.gamesPlayed = data.gamesPlayed;
+      }
+    });
+
+    // Listen for credit exhausted event
+    socketStore.client?.on('credit-exhausted', (data: { message: string }) => {
+      console.log('[BingoRoom] Credit exhausted:', data);
+      showToast(data.message || 'No credits remaining. Contact admin to top up.', 'error');
+    });
   } catch (error) {
     console.error('Error loading room:', error);
     showToast('Failed to load room. Please try again.', 'error');
@@ -2717,17 +2763,15 @@ onBeforeUnmount(() => {
 
 .card-detail-close {
   margin: 0;
-  color: #ffffff;
+  color: #ffffff !important;
+  background-color: #d32f2f !important;
 }
 
 .card-detail-close-box {
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 4px;
-  background: #d32f2f;
+  gap: 8px;
+  /* Removed fixed width/height to accommodate multiple buttons */
 }
 
 .card-detail-info {
@@ -4188,6 +4232,73 @@ onBeforeUnmount(() => {
   .terminal-card-tile {
     flex-basis: 54px;
     height: 42px;
+  }
+}
+
+/* Terminal Action Row (Start Game + Clear Cards buttons) */
+.terminal-action-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  max-width: 700px;
+  margin: 28px auto 0;
+  padding: 0 16px;
+}
+
+.terminal-action-row .terminal-start-btn {
+  flex: 1 1 auto;
+  margin: 0;
+  min-width: 0;
+  max-width: 500px;
+}
+
+.terminal-clear-btn {
+  flex: 0 0 auto;
+  min-width: 150px;
+  min-height: 52px;
+  border: 0;
+  border-radius: 5px;
+  background: #dc3545;
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 3px 6px rgba(220, 53, 69, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 16px;
+  white-space: nowrap;
+}
+
+.terminal-clear-btn:hover:not(:disabled) {
+  background: #c82333;
+}
+
+.terminal-clear-btn:disabled {
+  background: #aeb5bb;
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+@media (max-width: 600px) {
+  .terminal-action-row {
+    flex-direction: column;
+    gap: 10px;
+    padding: 0 12px;
+  }
+  
+  .terminal-action-row .terminal-start-btn {
+    max-width: 100%;
+  }
+  
+  .terminal-clear-btn {
+    min-width: 100%;
   }
 }
 </style>

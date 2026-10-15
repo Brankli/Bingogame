@@ -9,6 +9,9 @@ import { Match } from '../match/entities/match.entity';
 import { MatchNumber } from '../match/entities/match-number.entity';
 import { Card } from '../card/entities/card.entity';
 import { EarningsTransaction } from '../user/entities/earnings-transaction.entity';
+import { UserCreditTransaction } from '../user/entities/user-credit-transaction.entity';
+import { RoomCredit } from '../room-credit/entities/room-credit.entity';
+import { RoomCreditTransaction } from '../room-credit/entities/room-credit-transaction.entity';
 
 const ENTITIES = [
   Room,
@@ -19,6 +22,9 @@ const ENTITIES = [
   MatchNumber,
   Card,
   EarningsTransaction,
+  UserCreditTransaction,
+  RoomCredit,
+  RoomCreditTransaction,
 ];
 
 export function buildTypeOrmConfig(

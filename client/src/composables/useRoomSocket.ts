@@ -103,7 +103,8 @@ export function useRoomSocket(handlers: RoomSocketHandlers) {
     handlers.verificationResult.value = null;
     handlers.verifyCardNumber.value = '';
     handlers.matchWinners.value = [];
-    handlers.registeredCards.value = [];
+    // DON'T clear registeredCards - keep them for next game
+    // handlers.registeredCards.value = [];
     handlers.selectedCardForView.value = null;
     handlers.selectedCardGrid.value = null;
     handlers.showCardDetailsModal.value = false;

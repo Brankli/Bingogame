@@ -1,0 +1,220 @@
+================================================================================
+USER CREDIT SYSTEM - MANUAL TESTING GUIDE
+================================================================================
+
+PREREQUISITES:
+- Backend running: npm run start:dev
+- Frontend built: cd client && npm run build
+- Access to admin account
+
+================================================================================
+TEST SCENARIO 1: Add Credits to User
+================================================================================
+
+1. Login as ADMIN
+2. Navigate to: Admin Dashboard → User Management
+3. Find any user in the table
+4. Look for the "Credits" column (should show 0 initially)
+5. Click the 🪙 (coin) icon button in the Actions column
+6. In the "Add Credits" dialog:
+   - Enter amount: 10
+   - Enter notes: "Testing credit system"
+   - Click "Add Credits"
+7. EXPECTED RESULT:
+   ✓ Dialog closes
+   ✓ Toast message: "Added 10 credits successfully!"
+   ✓ User's Credits column now shows: 10
+   ✓ Games Played column shows: 0
+
+================================================================================
+TEST SCENARIO 2: Start Game (Credit Deduction)
+================================================================================
+
+1. Login as the USER who has credits (from Test 1)
+2. Navigate to any Room (e.g., Room 1)
+3. Look at the top section - verify "GAME NUMBER: 0"
+4. Register some cards (click on card numbers to select)
+5. Click "Start Game" button
+6. EXPECTED RESULT:
+   ✓ Game starts successfully
+   ✓ "GAME NUMBER" updates to: 1
+   ✓ Check console (F12): Should see credit update logs
+   ✓ User now has 9 credits remaining (10 - 1)
+
+7. Finish the game (or reset)
+8. Register cards again and click "Start Game"
+9. EXPECTED RESULT:
+   ✓ "GAME NUMBER" updates to: 2
+   ✓ User now has 8 credits remaining
+
+================================================================================
+TEST SCENARIO 3: Credit Exhaustion (Block Game Start)
+================================================================================
+
+1. As ADMIN, set user credits to 1:
+   - Go to User Management
+   - Click 🪙 to add credits
+   - (User should have 1 credit)
+
+2. Login as USER
+3. Navigate to room and register cards
+4. Click "Start Game" (this uses the last credit)
+5. EXPECTED RESULT:
+   ✓ Game starts
+   ✓ "GAME NUMBER" increments
+   ✓ Credits: 0
+
+6. Try to register cards and click "Start Game" again
+7. EXPECTED RESULT:
+   ✓ "Start Game" button is DISABLED (greyed out)
+   ✓ Toast error: "No credits remaining. Contact admin to top up."
+   ✓ Game does NOT start
+
+================================================================================
+TEST SCENARIO 4: Reset Games Played Counter
+================================================================================
+
+1. Login as ADMIN
+2. Navigate to: Admin Dashboard → User Management
+3. Find a user with gamesPlayed > 0
+4. Click the 🔄 (refresh) icon in Actions column
+5. Confirmation dialog appears:
+   "Reset games played counter for [username]?"
+   "Current: X games. This will reset to 0 but keep credits intact."
+6. Click "Confirm"
+7. EXPECTED RESULT:
+   ✓ Dialog closes
+   ✓ Toast: "Games played counter reset successfully!"
+   ✓ User's "Games Played" column shows: 0
+   ✓ User's "Credits" column remains UNCHANGED
+
+================================================================================
+TEST SCENARIO 5: Transaction History
+================================================================================
+
+1. Login as ADMIN
+2. Navigate to: Admin Dashboard → User Management
+3. Click 🪙 (Add Credits) for any user
+4. In the dialog, scroll down to see Transaction History table
+5. EXPECTED RESULT:
+   ✓ Table shows all credit transactions
+   ✓ Columns: Date, Type, Amount, Notes, Added By
+   ✓ Types include: top_up, game_deduction, counter_reset
+   ✓ Most recent transaction at top
+
+================================================================================
+TEST SCENARIO 6: User Credits Overview
+================================================================================
+
+1. Login as ADMIN
+2. Navigate to: Admin Dashboard → Room Credits
+   (Tab repurposed as "User Credits Overview")
+3. EXPECTED RESULT:
+   ✓ Table shows ALL users
+   ✓ Columns: Username, Role, Credits, Games Played
+   ✓ Total credits summary displayed
+   ✓ Page auto-refreshes every 30 seconds
+
+================================================================================
+TEST SCENARIO 7: Game Counter Persistence
+================================================================================
+
+1. Login as USER with credits
+2. Navigate to a room
+3. Note the "GAME NUMBER" value (e.g., 5)
+4. Start 2 games → "GAME NUMBER" should be 7
+5. REFRESH the page (Ctrl+R or F5)
+6. EXPECTED RESULT:
+   ✓ "GAME NUMBER" still shows: 7
+   ✓ Counter persists across page refresh
+   ✓ Credits value also persists
+
+================================================================================
+TEST SCENARIO 8: Multiple Admins Adding Credits
+================================================================================
+
+1. Login as ADMIN 1
+2. Add 50 credits to User A
+3. Check transaction history - should show "Added By: admin1"
+
+4. Login as ADMIN 2 (different admin account)
+5. Add 30 credits to same User A
+6. Check transaction history:
+   ✓ Should show two separate transactions
+   ✓ First: +50, Added By: admin1
+   ✓ Second: +30, Added By: admin2
+
+================================================================================
+BACKEND LOGS VERIFICATION
+================================================================================
+
+When running npm run start:dev, check console logs during game start:
+
+Expected log sequence:
+[SocketGateway] Checking user credits...
+[SocketGateway] User has X credits
+[SocketGateway] Deducting 1 credit...
+[SocketGateway] ✅ Credit deducted. New balance: Y, Games played: Z
+
+If credits = 0:
+[SocketGateway] ❌ No credits remaining for user X
+
+================================================================================
+DATABASE VERIFICATION (Optional)
+================================================================================
+
+Using database client (DBeaver, pgAdmin, etc.):
+
+1. Check users table:
+   SELECT id, username, credits, gamesPlayed FROM users;
+   ✓ Verify credits and gamesPlayed columns exist
+   ✓ Values match what's shown in UI
+
+2. Check user_credit_transactions table:
+   SELECT * FROM user_credit_transactions ORDER BY createdAt DESC LIMIT 10;
+   ✓ Verify transactions are being recorded
+   ✓ Check type, amount, balanceBefore, balanceAfter
+
+================================================================================
+COMMON ISSUES & TROUBLESHOOTING
+================================================================================
+
+ISSUE: "Start Game" not disabled when credits = 0
+FIX: Check browser console for errors, refresh page
+
+ISSUE: Game counter not incrementing
+FIX: Check socket connection (F12 → Network → WS tab)
+
+ISSUE: Credits not updating after game start
+FIX: Verify backend logs show credit deduction, check socket events
+
+ISSUE: Transaction history empty
+FIX: Verify UserCreditTransaction entity is registered in database config
+
+================================================================================
+AUTOMATED TEST COMMANDS
+================================================================================
+
+Run unit tests:
+npm run test -- user-credit.service.spec.ts
+
+Run E2E tests:
+npm run test:e2e -- user-credits.e2e-spec.ts
+
+Run all tests:
+npm run test
+
+================================================================================
+SUCCESS CRITERIA
+================================================================================
+
+All scenarios above should pass with ✓ marks.
+System is production-ready when:
+✓ Credits deduct correctly on game start
+✓ Game counter increments and persists
+✓ Start button blocks when credits = 0
+✓ Admin can add/reset credits
+✓ Transaction history tracks all operations
+✓ No console errors in browser or backend
+
+================================================================================

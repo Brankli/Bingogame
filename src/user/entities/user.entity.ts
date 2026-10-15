@@ -36,6 +36,12 @@ export class User {
   @Column({ type: 'float', default: 0 })
   totalEarnings!: number;
 
+  @Column({ type: 'int', default: 0 })
+  credits!: number;
+
+  @Column({ type: 'int', default: 0 })
+  gamesPlayed!: number;
+
   @Column({ type: 'timestamp', nullable: true })
   createdAt!: Date;
 

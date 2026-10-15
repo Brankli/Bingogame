@@ -1,0 +1,79 @@
+================================================================================
+WHERE TO FIND "ADD CREDITS" BUTTON
+================================================================================
+
+CURRENT ISSUE:
+You are on "Room Credits" tab (User Credits Overview)
+This tab only DISPLAYS credit information - no action buttons
+
+SOLUTION:
+Navigate to "Users" tab in the left sidebar!
+
+================================================================================
+STEP-BY-STEP GUIDE
+================================================================================
+
+1. Look at the LEFT SIDEBAR (dark blue area)
+
+2. Find these menu items:
+   📊 Dashboard
+   🚪 Rooms
+   👥 Users          ← CLICK THIS ONE!
+   ➕ Register User
+   🃏 Card Management
+   🪙 Room Credits   ← You are currently here
+
+3. Click on "👥 Users" menu item
+
+4. You will see the User Management table with these columns:
+   - Username
+   - Email
+   - Role
+   - House Fee
+   - Total Earnings
+   - Credits          ← Shows credit balance
+   - Games Played     ← Shows games counter
+   - Created
+   - Last Active
+   - Actions          ← Contains the buttons!
+
+5. In the "Actions" column for each user, you will see:
+   - 🪙 (coin icon) - "Add Credits" button
+   - 🔄 (refresh icon) - "Reset Counter" button (only if gamesPlayed > 0)
+   - 🗑️ (trash icon) - "Delete" button
+
+6. Click the 🪙 button to add credits to that user
+
+================================================================================
+TWO DIFFERENT TABS EXPLAINED
+================================================================================
+
+Tab 1: "Users" (User Management)
+Location: Left sidebar → Users
+Purpose: Manage individual users
+Actions Available:
+✅ Add Credits (🪙 button)
+✅ Reset Counter (🔄 button)
+✅ Edit/Delete users
+Shows: Full user table with all details
+
+Tab 2: "Room Credits" (User Credits Overview)
+Location: Left sidebar → Room Credits
+Purpose: View credit summary for ALL users
+Actions Available:
+❌ NO action buttons (read-only view)
+Shows: Summary table with Username, Role, Credits, Games Played
+
+================================================================================
+QUICK FIX
+================================================================================
+
+Click "Users" in the left sidebar (3rd item from top)
+↓
+Look at the "Credits" column
+↓
+Click the 🪙 (coin) icon next to any user's credit balance
+↓
+Add Credits dialog will open!
+
+================================================================================

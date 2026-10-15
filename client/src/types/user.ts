@@ -9,6 +9,8 @@ export interface User {
   role: UserRole;
   houseFee?: number;
   totalEarnings?: number;
+  credits?: number;
+  gamesPlayed?: number;
   createdAt?: string | Date | null;
   lastActive?: string | Date | null;
 }

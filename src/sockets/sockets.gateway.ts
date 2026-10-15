@@ -138,6 +138,34 @@ export class SocketsGateway
       await this.ensureCanManageRoom(user, roomId);
       this.logger.log(`[SocketGateway] ✅ User authorized to manage room`);
 
+      // Check and deduct credits
+      this.logger.log(`[SocketGateway] Checking user credits...`);
+      const userWithCredits = await this.userService.findOne(user.id);
+      if (!userWithCredits) {
+        throw new WsException('User not found');
+      }
+
+      const currentCredits = userWithCredits.credits || 0;
+      this.logger.log(`[SocketGateway] User has ${currentCredits} credits`);
+
+      if (currentCredits <= 0) {
+        this.logger.warn(
+          `[SocketGateway] ❌ No credits remaining for user ${user.id}`,
+        );
+        client.emit('credit-exhausted', {
+          message: 'No credits remaining. Contact admin to top up.',
+          credits: 0,
+        });
+        throw new WsException('No credits remaining. Contact admin to top up.');
+      }
+
+      // Deduct credit and increment games played
+      this.logger.log(`[SocketGateway] Deducting 1 credit...`);
+      const creditResult = await this.userService.deductCredit(user.id, roomId);
+      this.logger.log(
+        `[SocketGateway] ✅ Credit deducted. New balance: ${creditResult.credits}, Games played: ${creditResult.gamesPlayed}`,
+      );
+
       this.logger.log(`[SocketGateway] Closing existing matches...`);
       const room = await this.roomService.closeMatches(roomId);
       this.logger.log(`[SocketGateway] ✅ Existing matches closed`);
@@ -169,6 +197,14 @@ export class SocketsGateway
       this.logger.log(
         `[SocketGateway] ✅ Added ${totalHouseFee} Birr house fee to user ${roomOwnerId}`,
       );
+
+      // Emit updated credit info to the client
+      client.emit('game-started', {
+        success: true,
+        credits: creditResult.credits,
+        gamesPlayed: creditResult.gamesPlayed,
+      });
+
       this.logger.log(
         `[SocketGateway] ========== NEW MATCH COMPLETE ==========`,
       );
@@ -289,5 +325,16 @@ export class SocketsGateway
 
   handleDisconnect(@ConnectedSocket() client: Socket): any {
     this.logger.log(`Client is disconnected! ${client.id}`);
+  }
+
+  /**
+   * Notify all clients in a room that the credit balance has changed.
+   * Called after an admin tops up credits.
+   */
+  notifyRoomCredits(data: { roomId: number; balance: number }): void {
+    this.logger.log(
+      `[RoomCredits] Broadcasting credit update to room ${data.roomId}: ${data.balance} credits`,
+    );
+    this.server.to(data.roomId.toString()).emit('room-credits-updated', data);
   }
 }

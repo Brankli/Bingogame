@@ -4,10 +4,11 @@ import { UserController } from './user.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from './entities/user.entity';
 import { EarningsTransaction } from './entities/earnings-transaction.entity';
+import { UserCreditTransaction } from './entities/user-credit-transaction.entity';
 import { AdminBootstrapService } from './admin-bootstrap.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([User, EarningsTransaction])],
+  imports: [TypeOrmModule.forFeature([User, EarningsTransaction, UserCreditTransaction])],
   controllers: [UserController],
   providers: [UserService, AdminBootstrapService],
   exports: [UserService],

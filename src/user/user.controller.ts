@@ -109,4 +109,48 @@ export class UserController {
     const history = await this.userService.getEarningsHistory(+id);
     return { data: history };
   }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Post('credits/summary')
+  async getAllUsersCredits() {
+    const data = await this.userService.getAllUsersCredits();
+    return { data };
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Post(':id/credits/add')
+  async addUserCredits(
+    @UserDecorator() admin,
+    @Param('id') id: string,
+    @Body() body: { amount: number; notes?: string },
+  ) {
+    const result = await this.userService.addCredits(
+      +id,
+      body.amount,
+      admin.id,
+      body.notes,
+    );
+    return result;
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Post(':id/credits/reset')
+  async resetUserGamesPlayed(
+    @UserDecorator() admin,
+    @Param('id') id: string,
+  ) {
+    const result = await this.userService.resetGamesPlayed(+id, admin.id);
+    return result;
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Get(':id/credits/transactions')
+  async getUserCreditTransactions(@Param('id') id: string) {
+    const transactions = await this.userService.getUserCreditTransactions(+id);
+    return { data: transactions };
+  }
 }
