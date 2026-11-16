@@ -6,9 +6,17 @@ import { User } from './entities/user.entity';
 import { EarningsTransaction } from './entities/earnings-transaction.entity';
 import { UserCreditTransaction } from './entities/user-credit-transaction.entity';
 import { AdminBootstrapService } from './admin-bootstrap.service';
+import { SyncOutbox } from '../sync/entities/sync-outbox.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([User, EarningsTransaction, UserCreditTransaction])],
+  imports: [
+    TypeOrmModule.forFeature([
+      User,
+      EarningsTransaction,
+      UserCreditTransaction,
+      SyncOutbox,
+    ]),
+  ],
   controllers: [UserController],
   providers: [UserService, AdminBootstrapService],
   exports: [UserService],

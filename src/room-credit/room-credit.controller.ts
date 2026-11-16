@@ -32,18 +32,14 @@ export class RoomCreditController {
   ) {}
 
   @Get()
-  async getBalance(
-    @Param('roomId', ParseIntPipe) roomId: number,
-  ) {
+  async getBalance(@Param('roomId', ParseIntPipe) roomId: number) {
     const balance = await this.roomCreditService.getBalance(roomId);
 
     return { roomId, balance };
   }
 
   @Get('transactions')
-  async getHistory(
-    @Param('roomId', ParseIntPipe) roomId: number,
-  ) {
+  async getHistory(@Param('roomId', ParseIntPipe) roomId: number) {
     return this.roomCreditService.getHistory(roomId);
   }
 
@@ -54,14 +50,10 @@ export class RoomCreditController {
     @Req() request: any,
   ) {
     // The authenticated JWT strategy should set request.user.
-    const adminUserId = Number(
-      request.user?.id ?? request.user?.userId,
-    );
+    const adminUserId = Number(request.user?.id ?? request.user?.userId);
 
     if (!Number.isSafeInteger(adminUserId) || adminUserId <= 0) {
-      throw new Error(
-        'Could not identify the authenticated administrator',
-      );
+      throw new Error('Could not identify the authenticated administrator');
     }
 
     const result = await this.roomCreditService.topUp(

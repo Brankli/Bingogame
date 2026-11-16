@@ -14,10 +14,8 @@ import { RoomCreditModule } from '../room-credit/room-credit.module';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
-        secret:
-          configService.get<string>('SECRET_KEY') ||
-          'electron-default-secret-key-change-in-production',
-        signOptions: { expiresIn: '1d' },
+        secret: configService.getOrThrow<string>('SECRET_KEY'),
+        signOptions: { expiresIn: '8h' },
       }),
       inject: [ConfigService],
     }),

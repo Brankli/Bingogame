@@ -3,7 +3,7 @@
     <v-app-bar elevation="4" class="app-header" v-if="showAppHeader">
       <v-app-bar-title class="app-title">
         <v-icon size="large" class="mr-2">mdi-cards</v-icon>
-        <span class="title-text">Bingo Game</span>
+        <span class="title-text">Asmat Bingo</span>
       </v-app-bar-title>
 
       <v-spacer></v-spacer>

@@ -333,6 +333,13 @@ export class CardService {
         [4, 0],
       ],
     ];
+    const corners: number[][] = [
+      [0, 0],
+      [0, 4],
+      [4, 0],
+      [4, 4],
+    ];
+    const patternUnits = [...lines, corners];
     const combineLines = (count: number): number[][][] => {
       const combinations: number[][][] = [];
       const visit = (start: number, selected: number[][][]) => {
@@ -340,8 +347,8 @@ export class CardService {
           combinations.push(selected.flat());
           return;
         }
-        for (let index = start; index < lines.length; index++) {
-          visit(index + 1, [...selected, lines[index]]);
+        for (let index = start; index < patternUnits.length; index++) {
+          visit(index + 1, [...selected, patternUnits[index]]);
         }
       };
       visit(0, []);

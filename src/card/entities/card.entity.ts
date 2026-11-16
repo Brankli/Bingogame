@@ -29,7 +29,10 @@ export class Card {
   @ManyToOne(() => Match, { nullable: true, onDelete: 'SET NULL' })
   lockedInMatch?: Match;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({
+    type: process.env.ELECTRON_MODE === 'true' ? 'datetime' : 'timestamp',
+    nullable: true,
+  })
   createdAt!: Date;
 
   @BeforeInsert()

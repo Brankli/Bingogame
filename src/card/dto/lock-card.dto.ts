@@ -6,4 +6,7 @@ export class LockCardDto {
 
   @IsNumber()
   matchId!: number;
+
+  @IsNumber()
+  roomId!: number;
 }

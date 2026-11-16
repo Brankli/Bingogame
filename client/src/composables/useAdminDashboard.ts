@@ -11,7 +11,7 @@ import type { RoomCardPreview, RoomCardStatus } from '@/types/roomCards';
 
 let adminDashboardSingleton: AdminDashboardContext | null = null;
 
-const ADMIN_TABS = ['dashboard', 'rooms', 'users', 'register', 'cards', 'profile'] as const;
+const ADMIN_TABS = ['dashboard', 'rooms', 'users', 'register', 'cards', 'credits', 'report', 'profile'] as const;
 type AdminTab = (typeof ADMIN_TABS)[number];
 
 function isAdminTab(value: string): value is AdminTab {
@@ -112,9 +112,10 @@ const changingPassword = ref(false);
 const selectedRoomForManager = ref<number | null>(null);
 const selectedUserForManager = ref<number | null>(null);
 const editingUserId = ref<number | null>(null);
-const editForm = ref<{ role: UserRole; houseFee: number }>({
+const editForm = ref<{ role: UserRole; houseFee: number; isActive: boolean }>({
   role: UserRole.USER,
   houseFee: 0,
+  isActive: true,
 });
 const cards = ref<any[]>([]);
 const roomCards = ref<any[]>([]);
@@ -589,6 +590,7 @@ function startEditUser(u: any) {
   editForm.value = {
     role: (u.role as UserRole) || UserRole.USER,
     houseFee: Number(u.houseFee || 0),
+    isActive: u.isActive !== false,
   };
 }
 
@@ -601,6 +603,7 @@ async function saveUser(userId: number) {
     await services?.userService.update(userId, {
       role: editForm.value.role,
       houseFee: Number(editForm.value.houseFee || 0),
+      isActive: editForm.value.isActive,
     });
     editingUserId.value = null;
     await loadUsers();

@@ -4,6 +4,7 @@ import AdminDashboard from '../views/AdminDashboard.vue'
 import BingoRoomView from '../views/BingoRoomview.vue'
 import { useAuth } from '@/store/auth'
 import { AuthService } from '@/services/AuthService'
+import DailyReportView from '../views/DailyReportView.vue'
 
 const authService = new AuthService()
 
@@ -31,6 +32,11 @@ const routes: Array<RouteRecordRaw> = [
     name: 'bingo-rooms',
     component: BingoRoomView,
   },
+  {
+    path: '/reports/daily',
+    name: 'daily-report',
+    component: DailyReportView,
+  },
 ]
 
 const router = createRouter({
@@ -39,7 +45,7 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
-  if (to.name !== 'admin-dashboard') {
+  if (to.name !== 'admin-dashboard' && to.name !== 'daily-report') {
     return true
   }
 
@@ -57,7 +63,10 @@ router.beforeEach(async (to) => {
     return { name: 'home' }
   }
 
-  if (String(auth.user?.role || '').toLowerCase() !== 'admin') {
+  if (
+    to.name === 'admin-dashboard' &&
+    String(auth.user?.role || '').toLowerCase() !== 'admin'
+  ) {
     return { name: 'home' }
   }
 

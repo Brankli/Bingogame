@@ -5,6 +5,7 @@ import {
   Entity,
   OneToMany,
   PrimaryGeneratedColumn,
+  UpdateDateColumn,
 } from 'typeorm';
 import { Room } from '../../room/entities/room.entity';
 
@@ -24,6 +25,12 @@ export class User {
   @Column({ nullable: false })
   password!: string;
 
+  @Column({ type: 'varchar', length: 64, nullable: true, unique: true })
+  centralId!: string | null;
+
+  @Column({ type: 'boolean', default: true })
+  isActive!: boolean;
+
   @Column({
     type: 'varchar',
     default: UserRole.USER,
@@ -42,11 +49,14 @@ export class User {
   @Column({ type: 'int', default: 0 })
   gamesPlayed!: number;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: 'datetime', nullable: true })
   createdAt!: Date;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: 'datetime', nullable: true })
   lastActive!: Date;
+
+  @UpdateDateColumn({ type: 'datetime', nullable: true })
+  updatedAt!: Date;
 
   @BeforeInsert()
   setDates() {

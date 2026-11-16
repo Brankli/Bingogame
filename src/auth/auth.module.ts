@@ -12,19 +12,21 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { RoomManagerGuard } from './guards/room-manager.guard';
 import { RoomModule } from '../room/room.module';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { SyncState } from '../sync/entities/sync-state.entity';
+import { OfflineAuthorizationService } from './offline-authorization.service';
 
 @Module({
   imports: [
     UserModule,
+    TypeOrmModule.forFeature([SyncState]),
     PassportModule,
     ConfigModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
-        secret:
-          configService.get<string>('SECRET_KEY') ||
-          'electron-default-secret-key-change-in-production',
-        signOptions: { expiresIn: '1y' },
+        secret: configService.getOrThrow<string>('SECRET_KEY'),
+        signOptions: { expiresIn: '8h' },
       }),
       inject: [ConfigService],
     }),
@@ -40,6 +42,7 @@ import { RoomModule } from '../room/room.module';
     JwtAuthGuard,
     RolesGuard,
     RoomManagerGuard,
+    OfflineAuthorizationService,
   ],
   exports: [JwtAuthGuard, WsGuard, RolesGuard, RoomManagerGuard],
 })

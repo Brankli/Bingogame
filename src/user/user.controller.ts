@@ -32,7 +32,8 @@ export class UserController {
     return mapToUserDto(user);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
   @Get()
   async findAll(): Promise<UserDto[]> {
     const users = await this.userService.findAll();
@@ -138,10 +139,7 @@ export class UserController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @Post(':id/credits/reset')
-  async resetUserGamesPlayed(
-    @UserDecorator() admin,
-    @Param('id') id: string,
-  ) {
+  async resetUserGamesPlayed(@UserDecorator() admin, @Param('id') id: string) {
     const result = await this.userService.resetGamesPlayed(+id, admin.id);
     return result;
   }

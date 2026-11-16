@@ -5,13 +5,13 @@ import { AppModule } from '../src/app.module';
 
 /**
  * E2E Tests for User Credit System
- * 
+ *
  * These tests verify the complete credit flow:
  * 1. Admin adds credits to user
  * 2. User starts games (credits deducted)
  * 3. Admin resets games played counter
  * 4. System blocks game start when credits = 0
- * 
+ *
  * Run with: npm run test:e2e -- user-credits.e2e-spec.ts
  */
 describe('User Credits System (e2e)', () => {

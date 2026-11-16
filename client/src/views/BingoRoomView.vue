@@ -44,6 +44,11 @@
                 <v-select v-model="houseFee" :items="houseFeeOptions" item-title="title" item-value="value"
                   label="Commission per card (%)" prepend-inner-icon="mdi-percent" density="compact" variant="outlined"
                   hide-details />
+                <v-divider class="my-3" />
+                <v-btn block variant="text" color="primary" @click="goToDailyReport">
+                  <v-icon class="mr-2">mdi-chart-line</v-icon>
+                  Financial Daily Report
+                </v-btn>
               </v-card-text>
             </v-card>
           </v-menu>
@@ -349,6 +354,7 @@
                       <td v-for="col in 5" :key="col" class="detail-card-cell" :class="{
                         'free-space': row === 3 && col === 3,
                         'called-marked': isCardCellCalled(row - 1, col - 1),
+                        'last-called-blink': isLastCalledCardCell(row - 1, col - 1),
                         'winning-marked': isWinningPatternCell(row - 1, col - 1),
                       }">
                         <span v-if="row === 3 && col === 3">FREE</span>
@@ -637,7 +643,6 @@ const showClearCardsDialog = ref(false); // Dialog for confirming card clear
 
 // Load bet amount from localStorage, default to 10 if not set
 const STORAGE_KEY_BET_AMOUNT = 'bingo_bet_amount';
-const STORAGE_KEY_REGISTERED_CARDS = 'bingo_registered_cards';
 
 const savedBetAmount = localStorage.getItem(STORAGE_KEY_BET_AMOUNT);
 console.log('[BingoRoom] Loaded bet amount from localStorage:', savedBetAmount);
@@ -779,12 +784,11 @@ const isCardCellCalled = (row: number, col: number): boolean => {
   const value = selectedCardGrid.value?.[row]?.[col];
   return typeof value === 'number' && value > 0 && isNumberCalled(value);
 };
-const getWinningCardCellValue = (row: number, col: number): string | number => {
-  if (!selectedCardGrid.value || !selectedCardGrid.value[row]) {
-    return row === 2 && col === 2 ? 'FREE' : '';
+const isLastCalledCardCell = (row: number, col: number): boolean => {
+  if (gameStatus.value !== 'paused' || !lastCalledNumber.value) {
+    return false;
   }
-  const value = selectedCardGrid.value[row][col];
-  return value === 0 ? 'FREE' : value;
+  return getCardCellValue(row, col) === lastCalledNumber.value;
 };
 
 const showToast = (message: string, color = 'info') => {
@@ -908,42 +912,6 @@ const getPatternTitle = (pattern: string): string => {
   const normalized = String(pattern || '').toLowerCase();
   const match = patterns.find((p) => String(p.value).toLowerCase() === normalized);
   return match?.title || pattern;
-};
-
-
-const getWinningPatternDetails = (): string => {
-  // Check if we have multiple patterns
-  const winningPatterns = verificationResult.value?.winningPatterns;
-  const patternNames = verificationResult.value?.patternNames;
-
-  if (Array.isArray(winningPatterns) && winningPatterns.length > 0 && Array.isArray(patternNames)) {
-    // Multiple patterns - show all pattern names
-    if (winningPatterns.length > 1) {
-      return `${winningPatterns.length} patterns: ${patternNames.join(', ')}`;
-    }
-    // Single pattern with name
-    return patternNames[0] || '';
-  }
-
-  // Fallback to old single pattern format
-  const winningPattern = verificationResult.value?.winningPattern;
-  if (!Array.isArray(winningPattern) || winningPattern.length === 0) {
-    return '';
-  }
-
-  const letters = ['B', 'I', 'N', 'G', 'O'];
-  const details = winningPattern
-    .map((cell) => {
-      const row = cell[0] ?? 0;
-      const col = cell[1] ?? 0;
-      const columnLetter = letters[col] || '?';
-      const cardValue = selectedCardGrid.value?.[row]?.[col];
-      const displayValue = cardValue === 0 ? 'FREE' : cardValue ?? '?';
-      return `${columnLetter}${row + 1}:${displayValue}`;
-    })
-    .join(', ');
-
-  return details;
 };
 
 const isCardRegistered = (cardNum: number): boolean => {
@@ -1114,6 +1082,10 @@ const goBack = () => {
   router.push({ name: 'home' });
 };
 
+const goToDailyReport = () => {
+  router.push({ name: 'daily-report' });
+};
+
 const confirmLogout = () => {
   showLogoutDialog.value = true;
 };
@@ -1138,7 +1110,10 @@ const startNewGame = async () => {
   // Unlock all cards from previous match before starting new game
   if (room.value?.currentMatch?.id) {
     try {
-      await services?.cardService.unlockMatch(room.value.currentMatch.id);
+      await services?.cardService.unlockMatch(
+        room.value.currentMatch.id,
+        room.value.id,
+      );
       console.log(`[Game Start] Unlocked all cards from previous match #${room.value.currentMatch.id}`);
     } catch (error) {
       console.warn('[Game Start] Failed to unlock cards from previous match:', error);
@@ -1364,7 +1339,7 @@ const stopAutoCall = () => {
   autoCallEnabled.value = false;
 };
 
-const resetGame = () => {
+const resetGame = async () => {
   if (!canManageRoom.value) {
     showToast('Only admin or assigned room manager can reset a game.', 'warning');
     return;
@@ -1396,7 +1371,14 @@ const resetGame = () => {
 
   // Unlock all cards for this match
   if (room.value?.currentMatch?.id) {
-    services?.cardService.unlockMatch(room.value.currentMatch.id);
+    try {
+      await services?.cardService.unlockMatch(
+        room.value.currentMatch.id,
+        room.value.id,
+      );
+    } catch (error) {
+      console.warn('[Game Reset] Failed to unlock cards:', error);
+    }
   }
 
   // No toast message needed - reset action is self-evident
@@ -1523,7 +1505,11 @@ const lockCardManually = async () => {
   }
 
   try {
-    await services?.cardService.lockCard(verifyCardNumber.value, room.value.currentMatch.id);
+    await services?.cardService.lockCard(
+      verifyCardNumber.value,
+      room.value.currentMatch.id,
+      room.value.id,
+    );
     
     // Play card-locked audio event
     if (currentLanguage.value === 'am') {
@@ -1626,6 +1612,13 @@ const getPatternCoordinates = (pattern: string): PatternCoordinates => {
     [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]],
     [[0, 4], [1, 3], [2, 2], [3, 1], [4, 0]],
   ];
+  const corners: number[][] = [
+    [0, 0],
+    [0, 4],
+    [4, 0],
+    [4, 4],
+  ];
+  const patternUnits = [...lines, corners];
   const combineLines = (count: number): PatternCoordinates => {
     const combinations: PatternCoordinates = [];
     const visit = (start: number, selected: number[][][]) => {
@@ -1633,8 +1626,8 @@ const getPatternCoordinates = (pattern: string): PatternCoordinates => {
         combinations.push(selected.flat());
         return;
       }
-      for (let index = start; index < lines.length; index++) {
-        visit(index + 1, [...selected, lines[index]]);
+      for (let index = start; index < patternUnits.length; index++) {
+        visit(index + 1, [...selected, patternUnits[index]]);
       }
     };
     visit(0, []);
@@ -1669,7 +1662,7 @@ const getPatternCoordinates = (pattern: string): PatternCoordinates => {
       [[0, 4], [1, 3], [2, 2], [3, 1], [4, 0]], // Top-right to bottom-left /
     ],
     corners: [
-      [[0, 0], [0, 4], [4, 0], [4, 4]], // Four corners only
+      corners,
     ],
     x: [
       [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]], // Top-left to bottom-right \
@@ -2752,11 +2745,29 @@ onBeforeUnmount(() => {
       box-shadow: 0 0 0 1px #ffffff, 0 3px 8px rgba(185, 28, 28, 0.35);
     }
 
+    &.last-called-blink {
+      animation: last-called-number-blink 0.8s ease-in-out infinite;
+      border-color: #f59e0b;
+      box-shadow: 0 0 0 2px #fef3c7, 0 0 18px rgba(245, 158, 11, 0.9);
+    }
+
     &.winning-marked {
       background: #22c55e;
       color: #ffffff;
       border-color: #15803d;
       box-shadow: 0 0 0 1px #ffffff, 0 0 12px rgba(34, 197, 94, 0.55);
+    }
+
+    @keyframes last-called-number-blink {
+      0%,
+      100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+      50% {
+        opacity: 0.45;
+        transform: scale(1.08);
+      }
     }
   }
 }

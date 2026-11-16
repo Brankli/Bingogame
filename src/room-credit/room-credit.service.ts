@@ -26,19 +26,32 @@ export class RoomCreditService {
     manager: EntityManager,
     roomId: number,
   ): Promise<void> {
-    // INSERT IGNORE is supported by MySQL/MariaDB.
-    await manager.query(
-      `INSERT IGNORE INTO room_credits (roomId, balance)
-       SELECT id, 0 FROM rooms WHERE id = ?`,
-      [roomId],
-    );
+    const roomExists = await manager
+      .createQueryBuilder()
+      .select('room.id')
+      .from('rooms', 'room')
+      .where('room.id = :roomId', { roomId })
+      .getRawOne();
+    if (!roomExists) {
+      throw new NotFoundException(`Room ${roomId} was not found`);
+    }
+
+    await manager
+      .createQueryBuilder()
+      .insert()
+      .into(RoomCredit)
+      .values({ roomId, balance: 0 })
+      .orIgnore()
+      .execute();
 
     const row = await manager.findOne(RoomCredit, {
       where: { roomId },
     });
 
     if (!row) {
-      throw new NotFoundException(`Room ${roomId} was not found`);
+      throw new NotFoundException(
+        `Credit balance for room ${roomId} was not found`,
+      );
     }
   }
 
@@ -63,22 +76,16 @@ export class RoomCreditService {
     idempotencyKey: string,
     userId: number,
   ): Promise<CreditReservation> {
-    if (
-      !idempotencyKey ||
-      idempotencyKey.length > 128
-    ) {
+    if (!idempotencyKey || idempotencyKey.length > 128) {
       throw new ConflictException(
         'A valid game request idempotency key is required',
       );
     }
 
     return this.dataSource.transaction(async (manager) => {
-      const existing = await manager.findOne(
-        RoomCreditTransaction,
-        {
-          where: { idempotencyKey },
-        },
-      );
+      const existing = await manager.findOne(RoomCreditTransaction, {
+        where: { idempotencyKey },
+      });
 
       if (existing) {
         if (existing.roomId !== roomId) {
@@ -88,10 +95,8 @@ export class RoomCreditService {
         }
 
         if (
-          existing.type ===
-            RoomCreditTransactionType.GAME_DEDUCTION &&
-          existing.status ===
-            RoomCreditTransactionStatus.COMMITTED
+          existing.type === RoomCreditTransactionType.GAME_DEDUCTION &&
+          existing.status === RoomCreditTransactionStatus.COMMITTED
         ) {
           // A successful retry must not create another match.
           return {
@@ -128,20 +133,17 @@ export class RoomCreditService {
       credit.balance -= 1;
       await manager.save(RoomCredit, credit);
 
-      const transaction = manager.create(
-        RoomCreditTransaction,
-        {
-          roomId,
-          type: RoomCreditTransactionType.GAME_DEDUCTION,
-          amount: 1,
-          balanceAfter: credit.balance,
-          idempotencyKey,
-          matchId: null,
-          status: RoomCreditTransactionStatus.RESERVED,
-          performedByUserId: userId,
-          note: 'Reserved for new Bingo match',
-        },
-      );
+      const transaction = manager.create(RoomCreditTransaction, {
+        roomId,
+        type: RoomCreditTransactionType.GAME_DEDUCTION,
+        amount: 1,
+        balanceAfter: credit.balance,
+        idempotencyKey,
+        matchId: null,
+        status: RoomCreditTransactionStatus.RESERVED,
+        performedByUserId: userId,
+        note: 'Reserved for new Bingo match',
+      });
 
       await manager.save(RoomCreditTransaction, transaction);
 
@@ -158,38 +160,24 @@ export class RoomCreditService {
     matchId: number,
   ): Promise<number> {
     return this.dataSource.transaction(async (manager) => {
-      const transaction = await manager.findOne(
-        RoomCreditTransaction,
-        {
-          where: { idempotencyKey },
-          lock: { mode: 'pessimistic_write' },
-        },
-      );
+      const transaction = await manager.findOne(RoomCreditTransaction, {
+        where: { idempotencyKey },
+        lock: { mode: 'pessimistic_write' },
+      });
 
       if (!transaction) {
-        throw new NotFoundException(
-          'Credit reservation was not found',
-        );
+        throw new NotFoundException('Credit reservation was not found');
       }
 
-      if (
-        transaction.status ===
-        RoomCreditTransactionStatus.COMMITTED
-      ) {
+      if (transaction.status === RoomCreditTransactionStatus.COMMITTED) {
         return transaction.balanceAfter;
       }
 
-      if (
-        transaction.status !==
-        RoomCreditTransactionStatus.RESERVED
-      ) {
-        throw new ConflictException(
-          'Credit reservation cannot be committed',
-        );
+      if (transaction.status !== RoomCreditTransactionStatus.RESERVED) {
+        throw new ConflictException('Credit reservation cannot be committed');
       }
 
-      transaction.status =
-        RoomCreditTransactionStatus.COMMITTED;
+      transaction.status = RoomCreditTransactionStatus.COMMITTED;
       transaction.matchId = matchId;
 
       await manager.save(RoomCreditTransaction, transaction);
@@ -199,9 +187,7 @@ export class RoomCreditService {
       });
 
       if (!credit) {
-        throw new NotFoundException(
-          'Room credit balance was not found',
-        );
+        throw new NotFoundException('Room credit balance was not found');
       }
 
       return credit.balance;
@@ -212,40 +198,26 @@ export class RoomCreditService {
    * Restore a reserved credit when match creation fails.
    * This operation is safe to retry.
    */
-  async refundReservation(
-    idempotencyKey: string,
-  ): Promise<number> {
+  async refundReservation(idempotencyKey: string): Promise<number> {
     return this.dataSource.transaction(async (manager) => {
-      const transaction = await manager.findOne(
-        RoomCreditTransaction,
-        {
-          where: { idempotencyKey },
-          lock: { mode: 'pessimistic_write' },
-        },
-      );
+      const transaction = await manager.findOne(RoomCreditTransaction, {
+        where: { idempotencyKey },
+        lock: { mode: 'pessimistic_write' },
+      });
 
       if (!transaction) {
-        throw new NotFoundException(
-          'Credit reservation was not found',
-        );
+        throw new NotFoundException('Credit reservation was not found');
       }
 
-      if (
-        transaction.status ===
-        RoomCreditTransactionStatus.REFUNDED
-      ) {
-        const existingCredit = await manager.findOne(
-          RoomCredit,
-          { where: { roomId: transaction.roomId } },
-        );
+      if (transaction.status === RoomCreditTransactionStatus.REFUNDED) {
+        const existingCredit = await manager.findOne(RoomCredit, {
+          where: { roomId: transaction.roomId },
+        });
 
         return existingCredit?.balance ?? 0;
       }
 
-      if (
-        transaction.status !==
-        RoomCreditTransactionStatus.RESERVED
-      ) {
+      if (transaction.status !== RoomCreditTransactionStatus.RESERVED) {
         throw new ConflictException(
           'A committed game cannot be refunded by this operation',
         );
@@ -257,16 +229,13 @@ export class RoomCreditService {
       });
 
       if (!credit) {
-        throw new NotFoundException(
-          'Room credit balance was not found',
-        );
+        throw new NotFoundException('Room credit balance was not found');
       }
 
       credit.balance += transaction.amount;
       await manager.save(RoomCredit, credit);
 
-      transaction.status =
-        RoomCreditTransactionStatus.REFUNDED;
+      transaction.status = RoomCreditTransactionStatus.REFUNDED;
       await manager.save(RoomCreditTransaction, transaction);
 
       await manager.save(
@@ -342,10 +311,9 @@ export class RoomCreditService {
   async getHistory(roomId: number): Promise<RoomCreditTransaction[]> {
     await this.getBalance(roomId);
 
-    return this.dataSource.getRepository(RoomCreditTransaction)
-      .find({
-        where: { roomId },
-        order: { createdAt: 'DESC', id: 'DESC' },
-      });
+    return this.dataSource.getRepository(RoomCreditTransaction).find({
+      where: { roomId },
+      order: { createdAt: 'DESC', id: 'DESC' },
+    });
   }
 }

@@ -5,6 +5,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { readFile } from 'fs/promises';
+import { join } from 'path';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Room } from './entities/room.entity';
@@ -25,8 +27,8 @@ import {
   buildStaticTemplateCardNumber,
   parseRoomCardIndex,
   parseStaticTemplateIndex,
-  STATIC_LIBRARY_SEED_BASE,
 } from '../card/card-number.util';
+import { validateBingoGrid } from '../card/bingo-grid.util';
 import { RoomCardMode } from './consts/room-card-mode.const';
 import {
   StaticCardLibraryGenerateResult,
@@ -185,11 +187,14 @@ export class RoomService {
   async generateStaticCardLibrary(
     reset = false,
   ): Promise<StaticCardLibraryGenerateResult> {
+    const sourceGrids = await this.loadStaticCardGrids();
+
     if (reset) {
       await this.cardRepository.delete({ isStaticTemplate: true });
     }
 
     const existingIndices = new Set<number>();
+    const existingCardsToUpdate: Card[] = [];
     const existing = await this.cardRepository.find({
       where: { cardNumber: Like('STATIC-CAR%') },
       relations: ['room'],
@@ -206,12 +211,21 @@ export class RoomService {
         );
       }
       existingIndices.add(idx);
-      if (!card.isStaticTemplate || card.templateIndex !== idx) {
-        card.isStaticTemplate = true;
-        card.templateIndex = idx;
-        card.isActive = true;
-        await this.cardRepository.save(card);
+      const grid = sourceGrids.get(idx);
+      if (!grid) {
+        throw new BadRequestException(
+          `Static card source is missing card ${idx}.`,
+        );
       }
+      card.grid = JSON.stringify(grid);
+      card.isStaticTemplate = true;
+      card.templateIndex = idx;
+      card.isActive = true;
+      existingCardsToUpdate.push(card);
+    }
+
+    if (existingCardsToUpdate.length > 0) {
+      await this.saveCardsInChunks(existingCardsToUpdate);
     }
 
     const cards: Card[] = [];
@@ -220,8 +234,12 @@ export class RoomService {
         continue;
       }
 
-      const seed = STATIC_LIBRARY_SEED_BASE + i * 1000;
-      const grid = this.cardService.generateCard(seed);
+      const grid = sourceGrids.get(i);
+      if (!grid) {
+        throw new BadRequestException(
+          `Static card source is missing card ${i}.`,
+        );
+      }
 
       cards.push(
         this.cardRepository.create({
@@ -249,9 +267,68 @@ export class RoomService {
       complete: total >= 400,
       message:
         total >= 400
-          ? `Static library ready (${total}/400). All static rooms will share these patterns.`
+          ? `Static library ready (${total}/400) from room-1-cards.csv. All static rooms will share these patterns.`
           : `Added ${cards.length} static card(s). Library now at ${total}/400.`,
     };
+  }
+
+  private async loadStaticCardGrids(): Promise<Map<number, number[][]>> {
+    const sourcePath = join(__dirname, '../card/data/room-1-cards.csv');
+    let csv: string;
+
+    try {
+      csv = await readFile(sourcePath, 'utf8');
+    } catch (error) {
+      throw new BadRequestException(
+        'The static card source file room-1-cards.csv could not be loaded.',
+      );
+    }
+
+    const lines = csv.trim().split(/\r?\n/);
+    if (lines[0] !== 'cardNumber,assigned,gridJson') {
+      throw new BadRequestException(
+        'The static card source file has an invalid header.',
+      );
+    }
+
+    const grids = new Map<number, number[][]>();
+    for (const line of lines.slice(1)) {
+      const match = /^ROOM1-CAR(\d{4}),,"(.+)"$/.exec(line);
+      if (!match) {
+        throw new BadRequestException(
+          'The static card source file contains an invalid row.',
+        );
+      }
+
+      const index = Number(match[1]);
+      let grid: number[][];
+      try {
+        grid = JSON.parse(match[2]) as number[][];
+      } catch {
+        throw new BadRequestException(
+          `The static card source contains invalid JSON for card ${index}.`,
+        );
+      }
+
+      const validation = validateBingoGrid(grid);
+      if (!validation.valid || grids.has(index)) {
+        throw new BadRequestException(
+          `The static card source contains an invalid or duplicate card ${index}.`,
+        );
+      }
+      grids.set(index, grid);
+    }
+
+    if (
+      grids.size !== 400 ||
+      [...grids.keys()].some((index) => index < 1 || index > 400)
+    ) {
+      throw new BadRequestException(
+        'The static card source must contain exactly cards 1 through 400.',
+      );
+    }
+
+    return grids;
   }
 
   private async assertStaticLibraryReady(): Promise<void> {

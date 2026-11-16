@@ -9,9 +9,16 @@ export class AdminBootstrapService implements OnModuleInit {
   constructor(private readonly userService: UserService) {}
 
   async onModuleInit(): Promise<void> {
-    const username = (process.env.ADMIN_USERNAME || 'admin').trim();
     const isProduction = process.env.NODE_ENV === 'production';
+    const username = process.env.ADMIN_USERNAME?.trim();
     const password = process.env.ADMIN_PASSWORD;
+
+    if (isProduction && !username) {
+      this.logger.error(
+        'ADMIN_USERNAME is required in production. Set ADMIN_USERNAME before starting the server.',
+      );
+      throw new Error('ADMIN_USERNAME is required in production');
+    }
 
     if (isProduction && !password) {
       this.logger.error(
@@ -20,7 +27,12 @@ export class AdminBootstrapService implements OnModuleInit {
       throw new Error('ADMIN_PASSWORD is required in production');
     }
 
-    const resolvedPassword = password || 'admin123';
+    if (!username) {
+      this.logger.warn(
+        'Admin bootstrap skipped because ADMIN_USERNAME is not configured.',
+      );
+      return;
+    }
 
     try {
       // Always ensure the configured username is an admin (useful for dev/seed scenarios).
@@ -47,15 +59,19 @@ export class AdminBootstrapService implements OnModuleInit {
         return;
       }
 
+      if (!password) {
+        throw new Error(
+          'ADMIN_PASSWORD is required to create the initial administrator.',
+        );
+      }
+
       const created = await this.userService.create({
         username,
-        password: resolvedPassword,
+        password,
       });
       await this.userService.update(created.id, { role: UserRole.ADMIN });
 
-      this.logger.warn(
-        `Bootstrapped admin user "${username}". Set ADMIN_PASSWORD env to change the default password.`,
-      );
+      this.logger.warn(`Bootstrapped configured admin user "${username}".`);
     } catch (error) {
       this.logger.error('Failed to bootstrap admin user', error as any);
     }

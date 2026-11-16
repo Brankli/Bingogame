@@ -1,5 +1,6 @@
 import {
   Column,
+  CreateDateColumn,
   Entity,
   ManyToOne,
   OneToMany,
@@ -19,11 +20,23 @@ export class Match {
   @Column({ default: 1 })
   soldCards!: number;
 
+  @Column({ type: 'float', nullable: true })
+  betAmount?: number;
+
+  @Column({ type: 'float', nullable: true })
+  houseFeePercent?: number;
+
   @Column('simple-array', { nullable: true })
   registeredCards?: string[];
 
   @Column({ default: 'twoline', nullable: true })
   pattern?: string;
+
+  @CreateDateColumn()
+  createdAt!: Date;
+
+  @Column({ type: 'float', default: 0 })
+  payoutAmount!: number;
 
   @ManyToOne(() => Room, (room) => room.matches, { onDelete: 'CASCADE' })
   room!: Room;

@@ -1,27 +1,44 @@
+
 const { app, BrowserWindow, utilityProcess } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
+const { loadDeviceIdentity } = require('./device-identity');
 
 let backendProcess = null;
 let mainWindow = null;
 let isQuitting = false;
+let backendExitCode = null;
+
+function loadExternalConfig() {
+  const configPath = path.join(app.getPath('userData'), 'config.json');
+  if (!fs.existsSync(configPath)) {
+    return {};
+  }
+  try {
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    return config && typeof config === 'object' ? config : {};
+  } catch (error) {
+    console.error('Failed to read external Bingo configuration:', error.message);
+    return {};
+  }
+}
 
 // Start the NestJS backend
-function startBackend() {
+async function startBackend() {
   const appPath = app.isPackaged
     ? path.join(process.resourcesPath, 'app.asar.unpacked')
     : path.join(__dirname, '..');
 
-  const backendPath = path.join(
-    appPath,
-    'dist',
-    'main.js'
-  );
+  const backendPath = path.join(appPath, 'dist', 'main.js');
 
-  console.log('Starting backend:', backendPath);
+  console.log('======================================');
+  console.log('Starting Bingo backend');
+  console.log('Packaged:', app.isPackaged);
+  console.log('Backend path:', backendPath);
   console.log('Backend exists:', fs.existsSync(backendPath));
-  console.log('App path:', appPath);
+  console.log('Working directory:', appPath);
+  console.log('======================================');
 
   if (!fs.existsSync(backendPath)) {
     console.error('Backend file not found:', backendPath);
@@ -29,45 +46,44 @@ function startBackend() {
   }
 
   try {
-    backendProcess = utilityProcess.fork(
-      backendPath,
-      [],
-      {
-        cwd: appPath,
-        stdio: 'pipe',
-        env: {
-          ...process.env,
-          ELECTRON_MODE: 'true',
-          NODE_ENV: 'production',
-          PORT: '3000',
-          CORS_ORIGIN: 'http://127.0.0.1:3000',
-          SECRET_KEY:
-            process.env.SECRET_KEY ||
-            'bingo-desktop-local-secret-key-change-this-32',
-          ADMIN_USERNAME: process.env.ADMIN_USERNAME || 'admin',
-          ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || 'admin123',
-        }
-      }
-    );
+    const identity = await loadDeviceIdentity();
+    const externalConfig = loadExternalConfig();
+    const runtimeConfig = {
+      ...process.env,
+      ...externalConfig,
+    };
+    backendProcess = utilityProcess.fork(backendPath, [], {
+      cwd: appPath,
+      stdio: 'inherit',
+      env: {
+        ...runtimeConfig,
+        ELECTRON_MODE: 'true',
+        NODE_ENV: 'production',
+        PORT: '3000',
+        CORS_ORIGIN: 'http://127.0.0.1:3000',
+        SECRET_KEY: runtimeConfig.SECRET_KEY,
+        ADMIN_USERNAME: runtimeConfig.ADMIN_USERNAME,
+        ADMIN_PASSWORD: runtimeConfig.ADMIN_PASSWORD,
+        SYNC_DEVICE_ID: runtimeConfig.SYNC_DEVICE_ID || identity.deviceId,
+        SYNC_DEVICE_SECRET:
+          runtimeConfig.SYNC_DEVICE_SECRET || identity.deviceSecret,
+      },
+    });
 
-    if (backendProcess.stdout) {
-      backendProcess.stdout.on('data', (data) => {
-        console.log('[Backend]', data.toString().trim());
-      });
-    }
-
-    if (backendProcess.stderr) {
-      backendProcess.stderr.on('data', (data) => {
-        console.error('[Backend Error]', data.toString().trim());
-      });
-    }
+    backendExitCode = null;
 
     backendProcess.on('spawn', () => {
-      console.log('Backend process spawned');
+      console.log('Bingo backend process spawned successfully.');
+      console.log('Backend PID:', backendProcess?.pid);
+    });
+
+    backendProcess.on('error', (error) => {
+      console.error('[Backend Process Error]', error);
     });
 
     backendProcess.on('exit', (code) => {
-      console.log(`Backend exited with code ${code}`);
+      console.error('[Backend Process Exit] Exit code:', code);
+      backendExitCode = code;
       backendProcess = null;
 
       if (!isQuitting && mainWindow && !mainWindow.isDestroyed()) {
@@ -80,50 +96,82 @@ function startBackend() {
 
     return true;
   } catch (error) {
-    console.error('Failed to start backend:', error);
+    console.error('Failed to launch Bingo backend:', error);
     backendProcess = null;
     return false;
   }
 }
 
-// Check whether the backend is ready
+// Wait until the backend responds
 function checkBackendReady(maxAttempts = 30) {
   return new Promise((resolve, reject) => {
     let attempts = 0;
+    let finished = false;
+    let retryTimer = null;
+
+    const finish = (error) => {
+      if (finished) return;
+      finished = true;
+
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+      }
+
+      if (error) {
+        reject(error);
+      } else {
+        resolve();
+      }
+    };
 
     const check = () => {
       if (isQuitting) {
-        reject(new Error('Application is quitting.'));
+        finish(new Error('Application is quitting.'));
+        return;
+      }
+
+      if (!backendProcess) {
+        finish(
+          new Error(
+            `Backend process exited before becoming ready. Exit code: ${
+              backendExitCode ?? 'unknown'
+            }`
+          )
+        );
         return;
       }
 
       attempts++;
+      console.log(`Checking backend readiness: ${attempts}/${maxAttempts}`);
 
-      const request = http.get(
-        'http://127.0.0.1:3000/',
-        (response) => {
-          // Any HTTP response confirms that a server answered.
-          response.resume();
+      const request = http.get('http://127.0.0.1:3000/', (response) => {
+        response.resume();
 
-          console.log('Backend responded with status:', response.statusCode);
-          resolve();
-        }
-      );
+        console.log(
+          'Backend responded with HTTP status:',
+          response.statusCode
+        );
+
+        finish();
+      });
 
       request.setTimeout(2000, () => {
         request.destroy(new Error('Backend request timed out.'));
       });
 
-      request.on('error', () => {
+      request.on('error', (error) => {
+        if (finished) return;
+
         if (attempts < maxAttempts) {
           console.log(
-            `Waiting for backend... ${attempts}/${maxAttempts}`
+            `Backend not ready yet (${attempts}/${maxAttempts}): ${error.message}`
           );
-          setTimeout(check, 1000);
+
+          retryTimer = setTimeout(check, 1000);
         } else {
-          reject(
+          finish(
             new Error(
-              'Backend failed to start after 30 attempts.'
+              'Backend failed to start after 30 attempts. Check the backend error output above.'
             )
           );
         }
@@ -136,7 +184,20 @@ function checkBackendReady(maxAttempts = 30) {
 
 // Create the Electron window
 function createWindow() {
+  const iconPath = app.isPackaged
+    ? path.join(
+        process.resourcesPath,
+        'app.asar.unpacked',
+        'client',
+        'dist',
+        'img',
+        'asmat-bingo-logo.png',
+      )
+    : path.join(__dirname, '..', 'client', 'public', 'img', 'asmat-bingo-logo.png');
+
   mainWindow = new BrowserWindow({
+    title: 'Asmat Bingo',
+    icon: iconPath,
     width: 1300,
     height: 850,
     minWidth: 1000,
@@ -145,20 +206,26 @@ function createWindow() {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      webSecurity: true
-    }
+      webSecurity: true,
+    },
   });
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
   });
 
-  mainWindow.loadURL('http://127.0.0.1:3000')
-    .catch((error) => {
-      console.error('Failed to load Bingo Game:', error);
+  mainWindow.webContents.on('did-fail-load', (_event, code, description, url) => {
+    console.error('Bingo page failed to load:', {
+      code,
+      description,
+      url,
     });
+  });
 
-  // Developer tools are available only in development.
+  mainWindow.loadURL('http://127.0.0.1:3000').catch((error) => {
+    console.error('Failed to load Bingo Game:', error);
+  });
+
   if (!app.isPackaged) {
     mainWindow.webContents.openDevTools();
   }
@@ -168,21 +235,23 @@ function createWindow() {
   });
 }
 
-// Start the backend and then open the app
+// Start backend, wait for readiness, then open the app
 app.whenReady().then(async () => {
   console.log('Electron app ready');
 
-  const started = startBackend();
+  const started = await startBackend();
 
   if (!started) {
-    console.error('Cannot open Bingo Game because the backend did not start.');
+    console.error('Cannot open Bingo Game: backend launch failed.');
     app.quit();
     return;
   }
 
   try {
     await checkBackendReady();
+
     if (!isQuitting) {
+      console.log('Backend is ready. Opening Bingo Game window.');
       createWindow();
     }
   } catch (error) {
@@ -191,14 +260,14 @@ app.whenReady().then(async () => {
   }
 });
 
-// macOS: reopen the window when the app is activated
+// macOS: reopen the window when activated
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0 && backendProcess) {
     createWindow();
   }
 });
 
-// Stop the backend when Electron exits
+// Stop backend when Electron exits
 app.on('before-quit', () => {
   isQuitting = true;
 
@@ -206,7 +275,7 @@ app.on('before-quit', () => {
     try {
       backendProcess.kill();
     } catch (error) {
-      console.error('Failed to stop backend:', error);
+      console.error('Failed to stop Bingo backend:', error);
     }
 
     backendProcess = null;

@@ -12,6 +12,8 @@ import { EarningsTransaction } from '../user/entities/earnings-transaction.entit
 import { UserCreditTransaction } from '../user/entities/user-credit-transaction.entity';
 import { RoomCredit } from '../room-credit/entities/room-credit.entity';
 import { RoomCreditTransaction } from '../room-credit/entities/room-credit-transaction.entity';
+import { SyncState } from '../sync/entities/sync-state.entity';
+import { SyncOutbox } from '../sync/entities/sync-outbox.entity';
 
 const ENTITIES = [
   Room,
@@ -25,6 +27,8 @@ const ENTITIES = [
   UserCreditTransaction,
   RoomCredit,
   RoomCreditTransaction,
+  SyncState,
+  SyncOutbox,
 ];
 
 export function buildTypeOrmConfig(
@@ -32,8 +36,35 @@ export function buildTypeOrmConfig(
   isElectron: boolean,
 ): TypeOrmModuleOptions {
   const isProduction = process.env.NODE_ENV === 'production';
-  // const synchronize = !isProduction;
-  const synchronize = isElectron || !isProduction;
+  const synchronize = !isProduction;
+  const localMigrations = [
+    __dirname + '/../database/migrations/*.js',
+    __dirname + '/../database/migrations/*.ts',
+  ];
+
+  if (process.env.SYNC_SERVER_MODE === 'true') {
+    return {
+      type: 'mysql',
+      host: configService.getOrThrow<string>('SYNC_DB_HOST'),
+      port: Number(configService.get<string>('SYNC_DB_PORT', '3306')),
+      username: configService.getOrThrow<string>('SYNC_DB_USER'),
+      password: configService.get<string>('SYNC_DB_PASS', ''),
+      database: configService.getOrThrow<string>('SYNC_DB_NAME'),
+      entities: [
+        require('../sync-server/entities/sync-user.entity').SyncUser,
+        require('../sync-server/entities/sync-device.entity').SyncDevice,
+        require('../sync-server/entities/sync-log.entity').SyncLog,
+        require('../sync-server/entities/sync-device-user.entity')
+          .SyncDeviceUser,
+      ],
+      synchronize: false,
+      migrations: [
+        __dirname + '/../sync-server/migrations/*.js',
+        __dirname + '/../sync-server/migrations/*.ts',
+      ],
+      migrationsRun: true,
+    };
+  }
 
   /**
    * =========================
@@ -57,6 +88,8 @@ export function buildTypeOrmConfig(
       database: dbPath,
       entities: ENTITIES,
       synchronize,
+      migrations: localMigrations,
+      migrationsRun: true,
     };
   }
 
@@ -85,7 +118,9 @@ export function buildTypeOrmConfig(
       entities: ENTITIES,
 
       // IMPORTANT
-      synchronize: true,
+      synchronize: false,
+      migrations: localMigrations,
+      migrationsRun: true,
 
       ssl: {
         rejectUnauthorized: false,
@@ -109,6 +144,8 @@ export function buildTypeOrmConfig(
       database: dbPath,
       entities: ENTITIES,
       synchronize,
+      migrations: localMigrations,
+      migrationsRun: true,
     };
   }
 
@@ -134,6 +171,8 @@ export function buildTypeOrmConfig(
     database,
     entities: ENTITIES,
     synchronize,
+    migrations: localMigrations,
+    migrationsRun: true,
     ...(dbType === 'mysql' && {
       driver: require('mysql2'),
     }),

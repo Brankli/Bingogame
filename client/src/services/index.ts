@@ -3,12 +3,16 @@ import RoomService from "@/services/RoomService";
 import {UserService} from "@/services/UserService";
 import {AuthService} from "@/services/AuthService";
 import CardService from "@/services/card.service";
+import {SyncService} from "@/services/SyncService";
+import {ReportService} from "@/services/ReportService";
 
 export interface Services {
     roomService: RoomService,
     userService: UserService,
     authService: AuthService,
     cardService: CardService,
+    syncService: SyncService,
+    reportService: ReportService,
 }
 
 export default {
@@ -18,6 +22,8 @@ export default {
             userService: new UserService(),
             authService: new AuthService(),
             cardService: new CardService(),
+            syncService: new SyncService(),
+            reportService: new ReportService(),
         });
     },
 };

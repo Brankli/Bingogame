@@ -6,6 +6,7 @@ export enum UserRole {
 export interface User {
   id: number;
   username: string;
+  isActive?: boolean;
   role: UserRole;
   houseFee?: number;
   totalEarnings?: number;

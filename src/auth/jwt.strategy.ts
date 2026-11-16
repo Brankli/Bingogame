@@ -13,15 +13,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey:
-        configService.get<string>('SECRET_KEY') ||
-        'electron-default-secret-key-change-in-production',
+      secretOrKey: configService.getOrThrow<string>('SECRET_KEY'),
     });
   }
 
   async validate(payload: any) {
     const user = await this.userService.findOne(payload.sub);
-    if (user === null) {
+    if (user === null || user.isActive === false) {
       throw new UnauthorizedException();
     }
 

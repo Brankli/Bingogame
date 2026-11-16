@@ -43,6 +43,7 @@ describe('card-verify.util', () => {
       () => 'Four Corners',
     );
     expect(result.validNow).toHaveLength(1);
+    expect(result.validNowNames).toEqual(['Four Corners']);
     expect(result.lateOnly).toHaveLength(0);
   });
 
@@ -66,6 +67,35 @@ describe('card-verify.util', () => {
     );
     expect(result.validNow).toHaveLength(0);
     expect(result.lateOnly).toHaveLength(1);
+  });
+
+  it('counts Four Corners as one unit in a two-line pattern', () => {
+    const called = [1, 61, 5, 65, 16, 46, 31];
+    const marked = buildMarkedCells(cornersGrid, called);
+    const horizontalLine = [
+      [0, 0],
+      [0, 1],
+      [0, 2],
+      [0, 3],
+      [0, 4],
+    ];
+    const fourCorners = [
+      [0, 0],
+      [0, 4],
+      [4, 0],
+      [4, 4],
+    ];
+
+    const result = evaluatePatternWins(
+      cornersGrid,
+      marked,
+      [[...horizontalLine, ...fourCorners]],
+      31,
+      () => 'Horizontal + Four Corners',
+    );
+
+    expect(result.validNow).toHaveLength(1);
+    expect(result.validNowNames).toEqual(['Horizontal + Four Corners']);
   });
 
   it('counts marked non-free cells for special win', () => {

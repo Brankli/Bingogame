@@ -170,14 +170,6 @@ export class SocketsGateway
       const room = await this.roomService.closeMatches(roomId);
       this.logger.log(`[SocketGateway] ✅ Existing matches closed`);
 
-      this.logger.log(`[SocketGateway] Starting new match...`);
-      await this.roomService.startMatch(room, {
-        soldCards,
-        registeredCards: registeredCards || [],
-        pattern: pattern || 'twoline',
-      });
-      this.logger.log(`[SocketGateway] ✅ Match started successfully`);
-
       // Calculate commission as a percentage of each card's bet.
       const commissionPercent = Math.min(
         100,
@@ -187,6 +179,17 @@ export class SocketsGateway
         0,
         Number(betAmount) || Number(room.ticketPrice) || 0,
       );
+
+      this.logger.log(`[SocketGateway] Starting new match...`);
+      await this.roomService.startMatch(room, {
+        soldCards,
+        betAmount: amountPerCard,
+        houseFeePercent: commissionPercent,
+        registeredCards: registeredCards || [],
+        pattern: pattern || 'twoline',
+      });
+      this.logger.log(`[SocketGateway] ✅ Match started successfully`);
+
       const totalHouseFee =
         soldCards * amountPerCard * (commissionPercent / 100);
 

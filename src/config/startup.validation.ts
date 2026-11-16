@@ -9,6 +9,7 @@ export function validateProductionEnv(): void {
     return;
   }
 
+  const isSyncServer = process.env.SYNC_SERVER_MODE === 'true';
   const secret = process.env.SECRET_KEY?.trim();
   if (!secret || WEAK_SECRETS.has(secret) || secret.length < 32) {
     throw new Error(
@@ -16,14 +17,41 @@ export function validateProductionEnv(): void {
     );
   }
 
-  if (!process.env.ADMIN_PASSWORD?.trim()) {
+  if (!isSyncServer && !process.env.ADMIN_PASSWORD?.trim()) {
     throw new Error('ADMIN_PASSWORD is required in production.');
   }
 
-  if (!process.env.CORS_ORIGIN?.trim()) {
+  if (!isSyncServer && !process.env.ADMIN_USERNAME?.trim()) {
+    throw new Error('ADMIN_USERNAME is required in production.');
+  }
+
+  if (!isSyncServer && !process.env.CORS_ORIGIN?.trim()) {
     throw new Error(
       'CORS_ORIGIN is required in production (comma-separated frontend URLs).',
     );
+  }
+
+  if (isSyncServer) {
+    if (!process.env.SYNC_SERVER_SECRET?.trim()) {
+      throw new Error('SYNC_SERVER_SECRET is required in sync-server mode.');
+    }
+    if (!process.env.SYNC_ENROLLMENT_TOKEN?.trim()) {
+      throw new Error('SYNC_ENROLLMENT_TOKEN is required in sync-server mode.');
+    }
+    if (!process.env.SYNC_PUBLISH_ENROLLMENT_TOKEN?.trim()) {
+      throw new Error(
+        'SYNC_PUBLISH_ENROLLMENT_TOKEN is required in sync-server mode.',
+      );
+    }
+    if (
+      !process.env.SYNC_DB_HOST?.trim() ||
+      !process.env.SYNC_DB_USER?.trim() ||
+      !process.env.SYNC_DB_NAME?.trim()
+    ) {
+      throw new Error(
+        'SYNC_DB_HOST, SYNC_DB_USER, and SYNC_DB_NAME are required in sync-server mode.',
+      );
+    }
   }
 }
 

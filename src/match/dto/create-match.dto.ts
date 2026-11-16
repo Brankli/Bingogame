@@ -5,6 +5,14 @@ export class CreateMatchDto {
   soldCards: number;
 
   @IsOptional()
+  @IsNumber({ allowNaN: false, allowInfinity: false })
+  betAmount?: number;
+
+  @IsOptional()
+  @IsNumber({ allowNaN: false, allowInfinity: false })
+  houseFeePercent?: number;
+
+  @IsOptional()
   @IsArray()
   @IsString({ each: true })
   registeredCards?: string[];

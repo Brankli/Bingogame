@@ -11,10 +11,7 @@ import { SocketsModule } from '../sockets/sockets.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([
-      RoomCredit,
-      RoomCreditTransaction,
-    ]),
+    TypeOrmModule.forFeature([RoomCredit, RoomCreditTransaction]),
     AuthModule,
     forwardRef(() => SocketsModule),
   ],

@@ -50,15 +50,16 @@ class CardService extends Api {
     return this.httpClient.post(`/cards/unassign/${cardNumber}`);
   }
 
-  async lockCard(cardNumber: string, matchId: number) {
+  async lockCard(cardNumber: string, matchId: number, roomId: number) {
     return this.httpClient.post('/cards/lock', {
       cardNumber,
       matchId,
+      roomId,
     });
   }
 
-  async unlockMatch(matchId: number) {
-    return this.httpClient.post(`/cards/unlock-match/${matchId}`);
+  async unlockMatch(matchId: number, roomId: number) {
+    return this.httpClient.post(`/cards/unlock-match/${matchId}`, { roomId });
   }
 
   async delete(cardId: number) {

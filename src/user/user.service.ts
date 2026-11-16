@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -12,6 +12,7 @@ import {
   UserCreditTransaction,
   CreditTransactionType,
 } from './entities/user-credit-transaction.entity';
+import { SyncOutbox } from '../sync/entities/sync-outbox.entity';
 
 @Injectable()
 export class UserService {
@@ -22,12 +23,28 @@ export class UserService {
     private readonly earningsRepository: Repository<EarningsTransaction>,
     @InjectRepository(UserCreditTransaction)
     private readonly creditTransactionRepository: Repository<UserCreditTransaction>,
+    @Optional()
+    @InjectRepository(SyncOutbox)
+    private readonly syncOutboxRepository?: Repository<SyncOutbox>,
   ) {}
+
+  private async queueSync(userId: number, operation = 'UPSERT'): Promise<void> {
+    if (!this.syncOutboxRepository) {
+      return;
+    }
+    await this.syncOutboxRepository.upsert(
+      { userId, operation, status: 'PENDING', lastError: null },
+      ['userId'],
+    );
+  }
+
   async create(createUserDto: CreateUserDto): Promise<User> {
-    return await this.userRepository.save({
+    const user = await this.userRepository.save({
       ...createUserDto,
       password: await bcrypt.hash(createUserDto.password, 10),
     });
+    await this.queueSync(user.id);
+    return user;
   }
 
   async findAll(): Promise<User[]> {
@@ -86,11 +103,16 @@ export class UserService {
     if (payload.password) {
       payload.password = await bcrypt.hash(payload.password, 10);
     }
-    return this.userRepository.update({ id }, payload);
+    const result = await this.userRepository.update({ id }, payload);
+    if (result.affected) {
+      await this.queueSync(id);
+    }
+    return result;
   }
 
   async remove(id: number): Promise<void> {
     await this.userRepository.delete({ id });
+    await this.queueSync(id, 'DELETE');
   }
 
   async findByUsername(username: string) {

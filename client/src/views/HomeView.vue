@@ -4,11 +4,17 @@
     <v-app-bar color="white" elevation="1" class="modern-header" v-if="logged">
       <v-container class="d-flex align-center">
         <div class="d-flex align-center">
-          <v-avatar size="40" class="mr-3 app-logo-avatar">
-            <v-img src="/img/asmat-bingo-logo.png" alt="Asmat Bingo logo" cover />
-          </v-avatar>
+          <div
+            class="report-logo-trigger mr-3"
+            title="Double-click to open Daily Bingo Report"
+            @dblclick.stop="openDailyReport"
+          >
+            <v-avatar size="40" class="app-logo-avatar">
+              <v-img src="/img/asmat-bingo-logo.png" alt="Asmat Bingo logo" cover />
+            </v-avatar>
+          </div>
           <div>
-            <div class="app-name">Bingo Game</div>
+            <div class="app-name">Asmat Bingo</div>
             <div class="app-tagline">Play & Win</div>
           </div>
         </div>
@@ -33,12 +39,18 @@
       <v-container>
         <div class="hero-content">
           <div class="hero-icon-wrapper">
-            <v-avatar size="120" class="hero-icon">
-              <v-img src="/img/asmat-bingo-logo.png" alt="Asmat Bingo logo" cover />
-            </v-avatar>
+            <div
+              class="report-logo-trigger hero-icon-trigger"
+              title="Double-click to open Daily Bingo Report"
+              @dblclick.stop="openDailyReport"
+            >
+              <v-avatar size="120" class="hero-icon">
+                <v-img src="/img/asmat-bingo-logo.png" alt="Asmat Bingo logo" cover />
+              </v-avatar>
+            </div>
           </div>
 
-          <h1 class="hero-title">Welcome to Bingo Game</h1>
+          <h1 class="hero-title">Welcome to Asmat Bingo</h1>
           
 
           <!-- Admin Section -->
@@ -116,6 +128,17 @@
                   </div>
                 </div>
 
+                <v-btn
+                  color="info"
+                  variant="outlined"
+                  block
+                  class="mb-4"
+                  @click="router.push({ name: 'daily-report' })"
+                >
+                  <v-icon class="mr-2">mdi-chart-line</v-icon>
+                  View Daily Bingo Report
+                </v-btn>
+
                 <v-divider class="my-4"></v-divider>
 
                 <!-- Loading State -->
@@ -174,7 +197,7 @@
       <v-container>
         <div class="text-center">
           <p class="text-body-2 text-grey mb-2">
-            © 2026 Bingo Game. All rights reserved.
+            © 2026 Asmat Bingo. All rights reserved.
           </p>
           <p class="text-caption text-grey">
             Powered by Abiyot
@@ -300,6 +323,10 @@ function openManagedRoom(roomId: number) {
   router?.push({ name: 'bingo-rooms', params: { roomId } });
 }
 
+function openDailyReport() {
+  router?.push({ name: 'daily-report' });
+}
+
 function confirmLogout() {
   showLogoutDialog.value = true;
 }
@@ -352,6 +379,14 @@ onBeforeUnmount(() => {
   .app-logo-avatar {
     border: 1px solid #d9dee5;
     background: #fff;
+  }
+
+  .report-logo-trigger {
+    cursor: pointer;
+  }
+
+  .hero-icon-trigger {
+    display: inline-flex;
   }
 
   .app-name {

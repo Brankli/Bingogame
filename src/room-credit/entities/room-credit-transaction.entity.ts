@@ -61,6 +61,8 @@ export class RoomCreditTransaction {
   @Column({ type: 'varchar', length: 500, nullable: true })
   note!: string | null;
 
-  @CreateDateColumn({ type: 'timestamp' })
+  @CreateDateColumn({
+    type: process.env.ELECTRON_MODE === 'true' ? 'datetime' : 'timestamp',
+  })
   createdAt!: Date;
 }

@@ -18,9 +18,13 @@ export class RoomCredit {
   @Column({ type: 'int', default: 0 })
   balance!: number;
 
-  @CreateDateColumn({ type: 'timestamp' })
+  @CreateDateColumn({
+    type: process.env.ELECTRON_MODE === 'true' ? 'datetime' : 'timestamp',
+  })
   createdAt!: Date;
 
-  @UpdateDateColumn({ type: 'timestamp' })
+  @UpdateDateColumn({
+    type: process.env.ELECTRON_MODE === 'true' ? 'datetime' : 'timestamp',
+  })
   updatedAt!: Date;
 }

@@ -5,6 +5,8 @@ export class UserDto {
 
   username: string;
 
+  isActive: boolean;
+
   role: UserRole;
 
   houseFee: number;
@@ -24,6 +26,7 @@ export function mapToUserDto(user: User): UserDto {
   return {
     id: user.id,
     username: user.username,
+    isActive: user.isActive !== false,
     role: user.role,
     houseFee: user.houseFee ?? 0,
     totalEarnings: user.totalEarnings ?? 0,

@@ -1,15 +1,19 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { LoginDto } from './dto/login.dto';
 import { User } from '../user/entities/user.entity';
 import { JwtService } from '@nestjs/jwt';
 import { UserService } from '../user/user.service';
 import * as bcrypt from 'bcrypt';
+import { OfflineAuthorizationService } from './offline-authorization.service';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly userService: UserService,
     private readonly jwtService: JwtService,
+    private readonly offlineAuthorizationService: OfflineAuthorizationService,
   ) {}
 
   async login(loginDto: LoginDto): Promise<{ user; accessToken }> {
@@ -18,8 +22,15 @@ export class AuthService {
       return null;
     }
 
-    // Update last active timestamp
-    await this.userService.update(user.id, { lastActive: new Date() });
+    // Activity tracking must not prevent a valid user from signing in.
+    try {
+      await this.userService.update(user.id, { lastActive: new Date() });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Login succeeded, but last-active tracking failed for user ${user.id}: ${message}`,
+      );
+    }
 
     const accessToken = this.jwtService.sign({
       sub: user.id,
@@ -51,8 +62,9 @@ export class AuthService {
   }
 
   async validateUser(username: string, password: string): Promise<User | null> {
+    await this.offlineAuthorizationService.assertAllowed();
     const user = await this.userService.findByUsername(username);
-    if (user === null) {
+    if (user === null || user.isActive === false) {
       return null;
     }
 

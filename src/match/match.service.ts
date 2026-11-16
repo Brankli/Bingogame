@@ -216,6 +216,8 @@ export class MatchService {
     const match = await this.matchRepository.save({
       room,
       soldCards: createMatchDto.soldCards,
+      betAmount: createMatchDto.betAmount,
+      houseFeePercent: createMatchDto.houseFeePercent,
       registeredCards: createMatchDto.registeredCards || [],
       pattern: createMatchDto.pattern || 'twoline',
     });
@@ -253,6 +255,11 @@ export class MatchService {
       currentMatch: match,
       roomPrize,
     });
+
+    const payoutAmount =
+      roomPrize.onePrice + roomPrize.superPrice + roomPrize.bronzePrice;
+    await this.matchRepository.update({ id: match.id }, { payoutAmount });
+    match.payoutAmount = payoutAmount;
 
     const matchCount = await this.matchRepository.count({
       where: { room: { id: room.id } },

@@ -6,6 +6,35 @@
     </v-card-title>
     
     <v-card-text>
+      <v-alert
+        v-if="syncStatus"
+        :type="syncStatus.lastError ? 'error' : 'info'"
+        variant="tonal"
+        class="mb-4"
+      >
+        <div class="d-flex flex-wrap align-center justify-space-between ga-3">
+          <span>
+            Account sync:
+            <strong v-if="syncStatus.lastSuccessfulAt">
+              {{ formatSyncDate(syncStatus.lastSuccessfulAt) }}
+            </strong>
+            <strong v-else>not synchronized</strong>
+            <span v-if="syncStatus.pendingCount > 0">
+              · {{ syncStatus.pendingCount }} pending
+            </span>
+            <span v-if="syncStatus.lastError"> · {{ syncStatus.lastError }}</span>
+          </span>
+          <v-btn
+            size="small"
+            variant="outlined"
+            prepend-icon="mdi-cloud-sync"
+            :loading="syncing"
+            @click="runSync"
+          >
+            Synchronize
+          </v-btn>
+        </div>
+      </v-alert>
       <!-- Summary Alert -->
       <v-alert type="info" variant="tonal" class="mb-4">
         <v-icon class="mr-2">mdi-account-group</v-icon>
@@ -80,6 +109,7 @@
           <tr>
             <th class="text-left">Username</th>
             <th class="text-left">Role</th>
+            <th class="text-left">Status</th>
             <th class="text-left">House Fee</th>
             <th class="text-left">Total Earnings</th>
             <th class="text-left">Credits</th>
@@ -127,6 +157,26 @@
               </v-chip>
             </td>
             
+            <!-- House Fee -->
+            <td>
+              <v-switch
+                v-if="editingUserId === u.id"
+                v-model="editForm.isActive"
+                color="success"
+                label="Active"
+                density="compact"
+                hide-details
+              />
+              <v-chip
+                v-else
+                size="small"
+                :color="u.isActive === false ? 'error' : 'success'"
+                variant="tonal"
+              >
+                {{ u.isActive === false ? 'DISABLED' : 'ACTIVE' }}
+              </v-chip>
+            </td>
+
             <!-- House Fee -->
             <td>
               <div v-if="editingUserId === u.id" class="fee-editor">
@@ -891,6 +941,15 @@ import {
 const { mdAndUp } = useDisplay();
 
 const services = inject<Services>('services');
+const syncStatus = ref<{
+  configured: boolean;
+  deviceId: string | null;
+  lastSuccessfulAt: string | null;
+  offlineAuthorizedUntil: string | null;
+  pendingCount: number;
+  lastError: string | null;
+} | null>(null);
+const syncing = ref(false);
 
 const {
   cancelEditUser,
@@ -909,6 +968,38 @@ const {
   totalUserEarnings,
   users,
 } = useAdminDashboard();
+
+function formatSyncDate(value: string) {
+  return new Date(value).toLocaleString();
+}
+
+async function loadSyncStatus() {
+  try {
+    syncStatus.value = (await services?.syncService.status())?.data ?? null;
+  } catch {
+    syncStatus.value = null;
+  }
+}
+
+async function runSync() {
+  syncing.value = true;
+  try {
+    syncStatus.value = (await services?.syncService.run())?.data ?? null;
+  } catch (error: any) {
+    syncStatus.value = {
+      ...(syncStatus.value || {
+        configured: false,
+        deviceId: null,
+        lastSuccessfulAt: null,
+        offlineAuthorizedUntil: null,
+        pendingCount: 0,
+      }),
+      lastError: error?.response?.data?.message || 'Synchronization failed',
+    };
+  } finally {
+    syncing.value = false;
+  }
+}
 
 // Search & Filter State
 const searchQuery = ref('');
@@ -1199,6 +1290,7 @@ async function confirmResetCounter() {
 onMounted(() => {
   console.log('[AdminUsersTabEnhanced] Component mounted, loading users...');
   loadUsers();
+  loadSyncStatus();
 });
 </script>
 

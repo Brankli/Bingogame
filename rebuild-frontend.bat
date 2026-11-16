@@ -17,8 +17,8 @@ if %ERRORLEVEL% EQU 0 (
     echo Next steps:
     echo 1. The backend should already be running (npm run start:dev)
     echo 2. Refresh your browser (Ctrl+F5 or Ctrl+Shift+R)
-    echo 3. Navigate to Admin Dashboard → Users
-    echo 4. You should now see the 🪙 (coin) icon buttons!
+    echo 3. Navigate to the Daily Bingo Report, or double-click the Bingo logo
+    echo 4. Confirm the financial report loads for today's date
     echo.
     echo ================================================================================
 ) else (

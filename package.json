@@ -42,13 +42,15 @@
     "@nestjs/websockets": "^9.2.1",
     "@socket.io/redis-adapter": "^8.0.0",
     "bcrypt": "^5.1.0",
-    "better-sqlite3": "^7.6.2",
+    "better-sqlite3": "^12.9.0",
     "bull": "^4.10.2",
     "cache-manager": "^4.1.0",
     "cache-manager-redis-store": "^2.0.0",
+    "axios": "^1.7.9",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.13.2",
     "ioredis": "^5.10.1",
+    "keytar": "^7.9.0",
     "mysql2": "^2.3.3",
     "passport": "^0.6.0",
     "passport-jwt": "^4.0.0",
@@ -60,7 +62,7 @@
     "rxjs": "^7.2.0",
     "socket.io": "^4.5.4",
     "sql.js": "^1.14.1",
-    "typeorm": "^0.3.10",
+    "typeorm": "^0.3.31",
     "vue-3-socket.io": "^1.0.5"
   },
   "devDependencies": {
@@ -109,13 +111,13 @@
   },
   "build": {
     "appId": "com.bingo.desktop",
-    "productName": "Bingo",
+    "productName": "Asmat Bingo",
+    "icon": "client/public/img/asmat-bingo-logo.png",
     "asar": true,
     "asarUnpack": [
       "dist/**",
-      "client/dist/**",
-      "node_modules/better-sqlite3/**",
-      "node_modules/bcrypt/**"
+  "client/dist/**",
+  "node_modules/**"
     ],
     "files": [
       "dist/**/*",
@@ -137,7 +139,7 @@
           ]
         }
       ],
-      "artifactName": "Bingo-Setup-${version}.${ext}"
+      "artifactName": "Asmat-Bingo-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -145,13 +147,15 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Bingo"
+      "shortcutName": "Asmat Bingo"
     }
   },
   "allowScripts": {
     "electron@25.9.8": true,
-    "better-sqlite3@7.6.2": true,
     "bcrypt@5.1.0": true,
-    "msgpackr-extract@2.2.0": true
+    "msgpackr-extract@2.2.0": true,
+    "better-sqlite3@12.9.0": true
+    ,
+    "keytar@7.9.0": true
   }
 }

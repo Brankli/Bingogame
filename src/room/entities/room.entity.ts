@@ -43,10 +43,16 @@ export class Room {
   })
   managers?: RoomManager[];
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({
+    type: process.env.ELECTRON_MODE === 'true' ? 'datetime' : 'timestamp',
+    nullable: true,
+  })
   createdAt!: Date;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({
+    type: process.env.ELECTRON_MODE === 'true' ? 'datetime' : 'timestamp',
+    nullable: true,
+  })
   startedAt!: Date;
 
   @BeforeInsert()

@@ -15,39 +15,28 @@ import type { ClientOpts } from 'redis';
 import { CardModule } from './card/card.module';
 import { buildTypeOrmConfig } from './config/database.config';
 import { RoomCreditModule } from './room-credit/room-credit.module';
+import { SyncModule } from './sync/sync.module';
+import { SyncServerModule } from './sync-server/sync-server.module';
+import { ReportModule } from './report/report.module';
 
 const isElectron =
   process.env.ELECTRON_MODE === 'true' ||
   process.versions.hasOwnProperty('electron');
-
-// const getStaticFilesPath = () => {
-//   if (isElectron) {
-//     const path = require('path');
-//     const resourcesPath =
-//       (process as any).resourcesPath || path.join(__dirname, '..', '..');
-
-//     return path.join(resourcesPath, 'app.asar.unpacked', 'client', 'dist');
-//   }
-
-//   return join(__dirname, '..', 'client/dist');
-// };
+const isSyncServer = process.env.SYNC_SERVER_MODE === 'true';
 
 const getStaticFilesPath = () => {
   if (isElectron) {
     const path = require('path');
 
-const resourcesPath = (process as NodeJS.Process & {
-  resourcesPath?: string;
-}).resourcesPath;
+    const resourcesPath = (
+      process as NodeJS.Process & {
+        resourcesPath?: string;
+      }
+    ).resourcesPath;
 
-if (resourcesPath) {
-  return path.join(
-    resourcesPath,
-    'app.asar.unpacked',
-    'client',
-    'dist',
-  );
-}
+    if (resourcesPath) {
+      return path.join(resourcesPath, 'app.asar.unpacked', 'client', 'dist');
+    }
 
     // Fallback for local development
     return path.join(__dirname, '..', '..', 'client', 'dist');
@@ -60,9 +49,13 @@ if (resourcesPath) {
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
 
-    ServeStaticModule.forRoot({
-      rootPath: getStaticFilesPath(),
-    }),
+    ...(isSyncServer
+      ? []
+      : [
+          ServeStaticModule.forRoot({
+            rootPath: getStaticFilesPath(),
+          }),
+        ]),
 
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -71,9 +64,15 @@ if (resourcesPath) {
       inject: [ConfigService],
     }),
 
-    // Cache configuration
     ...(isElectron
-      ? []
+      ? [
+          // Electron uses an in-memory cache; Redis is not required.
+          CacheModule.register({
+            isGlobal: true,
+            ttl: 300,
+            max: 100,
+          }),
+        ]
       : process.env.REDIS_HOST
       ? [
           CacheModule.register<ClientOpts>({
@@ -91,13 +90,19 @@ if (resourcesPath) {
           }),
         ]),
 
-    RoomModule,
-    AuthModule,
-    UserModule,
-    SocketsModule,
-    MatchModule,
-    CardModule,
-    RoomCreditModule,
+    ...(isSyncServer
+      ? [SyncServerModule]
+      : [
+          RoomModule,
+          AuthModule,
+          UserModule,
+          SocketsModule,
+          MatchModule,
+          CardModule,
+          RoomCreditModule,
+          SyncModule,
+          ReportModule,
+        ]),
   ],
   controllers: [AppController],
   providers: [AppService],

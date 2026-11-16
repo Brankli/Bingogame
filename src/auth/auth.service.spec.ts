@@ -2,14 +2,19 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
 import { UserService } from '../user/user.service';
+import { OfflineAuthorizationService } from './offline-authorization.service';
 
 describe('AuthService', () => {
   let service: AuthService;
   const userService = {
     findByUsername: jest.fn(),
+    update: jest.fn(),
   };
   const jwtService = {
     sign: jest.fn(() => 'signed-token'),
+  };
+  const offlineAuthorizationService = {
+    assertAllowed: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -18,6 +23,10 @@ describe('AuthService', () => {
         AuthService,
         { provide: UserService, useValue: userService },
         { provide: JwtService, useValue: jwtService },
+        {
+          provide: OfflineAuthorizationService,
+          useValue: offlineAuthorizationService,
+        },
       ],
     }).compile();
 
